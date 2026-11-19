@@ -1,0 +1,14 @@
+import { ArrowUpRight, Database, Network, X } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+
+export function InfoDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useFocusTrap(onClose);
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={dialogRef} className="modal info-dialog" role="dialog" aria-modal="true" aria-labelledby="info-title">
+    <header><span className="modal-icon"><Database size={20} /></span><div><span className="section-kicker">不隐藏证据从哪里来</span><h2 id="info-title">数据来源与参考方法</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭"><X size={19} /></button></header>
+    <div className="info-content"><section><h3>当前已经接入</h3><p>论文检索优先请求 <a href="https://docs.openalex.org/" target="_blank" rel="noreferrer">OpenAlex 官方 API<ArrowUpRight size={12} /></a>，额度受限或服务不可用时自动回退到 <a href="https://www.crossref.org/documentation/retrieve-metadata/rest-api/" target="_blank" rel="noreferrer">Crossref<ArrowUpRight size={12} /></a>，并复用短期缓存。每条结果会标明实际来源。OpenAlex 与 Crossref 的摘要覆盖不同，缺失摘要时会明确提示。课题和收藏保存在本地，匹配度是透明启发式分数，不是实验成功概率。</p><p>初始 CsPbBr₃ 网络是用于演示交互的精选样例，不是完整系统综述。演示论文的 DOI 与题目已按 OpenAlex 核对，静态被引数是 2026 年 11 月 7 日的快照而非实时值。中文说明用于阅读引导，正式引用前请回溯原文核对。</p></section>
+      <section><h3>交互方法参考</h3><div className="reference-links"><a href="https://www.connectedpapers.com/about" target="_blank" rel="noreferrer"><Network size={16} /><span><strong>Connected Papers</strong><small>从种子论文形成领域全景，再进入前期与衍生工作。</small></span><ArrowUpRight size={13} /></a><a href="https://www.researchrabbit.ai/features" target="_blank" rel="noreferrer"><Network size={16} /><span><strong>ResearchRabbit</strong><small>种子、收藏、持续探索与再推荐形成闭环。</small></span><ArrowUpRight size={13} /></a><a href="https://docs.litmaps.com/en/articles/9181490-use-and-edit-litmaps-visualization" target="_blank" rel="noreferrer"><Network size={16} /><span><strong>Litmaps</strong><small>区分地图语义与证据来源，保留清晰原文路径。</small></span><ArrowUpRight size={13} /></a></div></section>
+      <section><h3>后续科研 Agent 架构参考</h3><p><a href="https://github.com/Future-House/paper-qa" target="_blank" rel="noreferrer">PaperQA</a> 可用于带全文证据的问答，<a href="https://github.com/AkariAsai/OpenScholar" target="_blank" rel="noreferrer">OpenScholar</a> 与 <a href="https://github.com/allenai/ai2-scholarqa-lib" target="_blank" rel="noreferrer">AI2 ScholarQA</a> 可参考检索增强综述与引文组织。这些项目当前未被伪装成已集成功能；生产环境应增加服务端密钥管理、全文解析、引文核验和实验记录权限。</p></section>
+      <section><h3>为什么不直接堆叠更多检索源</h3><p>arXiv 浏览器跨域限制、Semantic Scholar 匿名限流和出版商全文权限都需要单独处理。下一阶段适合用轻量服务端统一代理 Crossref、arXiv 与机构访问，并记录查询时间和去重规则，而不是在前端隐藏失败或返回虚构论文。</p></section>
+    </div><footer><span>探索可以发散，证据必须可回溯。</span><button className="primary-action" onClick={onClose}>知道了</button></footer>
+  </section></div>;
+}

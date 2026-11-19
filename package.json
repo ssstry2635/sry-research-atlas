@@ -1,0 +1,43 @@
+{
+  "name": "@local/bohr-research-atlas",
+  "version": "4.5.2",
+  "private": true,
+  "type": "module",
+  "description": "玻尔科学空间：双侧材料知识网络、论文检索与 DSH 原生对话联动工作台",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "lucide-react": "^0.468.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

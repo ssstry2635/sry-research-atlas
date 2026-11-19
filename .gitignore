@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.pnpm-store/
+.test-deps/
+.tmp/
+test-results/
+*.log
+.DS_Store
