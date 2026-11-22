@@ -1,12 +1,12 @@
 {
   "format": 1,
   "title": {
-    "en": "Bohr Research Atlas Market Index",
-    "zh": "玻尔科学空间插件索引"
+    "en": "SRY Research Atlas Market Index",
+    "zh": "SRY Research Atlas 插件索引"
   },
   "description": {
-    "en": "Official format-1 DSH plugin market index for Bohr Research Atlas (sry-research-atlas).",
-    "zh": "玻尔科学空间（sry-research-atlas）的 DSH Format-1 插件市场索引源。"
+    "en": "Official format-1 DSH plugin market index for SRY Research Atlas (sry-research-atlas).",
+    "zh": "SRY Research Atlas（sry-research-atlas）的 DSH Format-1 插件市场索引源。"
   },
   "metadata": {
     "categories": {
@@ -37,8 +37,8 @@
     {
       "name": "sry-research-atlas",
       "title": {
-        "en": "Bohr Research Atlas",
-        "zh": "玻尔科学空间"
+        "en": "SRY Research Atlas",
+        "zh": "SRY Research Atlas"
       },
       "description": {
         "en": "Build a bilateral research knowledge network in DSH, search OpenAlex, Crossref, Europe PMC and arXiv, generate bilingual summaries and interactive mind maps, download legal open-access PDFs, and collaborate with native DSH conversation.",
@@ -70,12 +70,12 @@
       },
       "versions": [
         {
-          "version": "4.9.0",
-          "publishTimestamp": 1795358000,
+          "version": "4.9.1",
+          "publishTimestamp": 1795363000,
           "source": {
             "type": "git",
             "url": "https://github.com/ssstry2635/sry-research-atlas",
-            "commit": "0e516123ca30de94948098569cee266549005c70"
+            "commit": "66a53f66954e2d28bbdf9a7e47bc5b5f8767bf64"
           },
           "engines": {
             "dsh": ">=0.2.2-rc.5 <0.3.0-0"
