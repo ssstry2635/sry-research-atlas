@@ -1,6 +1,6 @@
 {
   "name": "sry-research-atlas",
-  "version": "4.7.0",
+  "version": "4.8.0",
   "type": "module",
   "description": "Bohr Research Atlas (玻尔科学空间): bilateral knowledge graph, multi-source scholarly retrieval (OpenAlex, Crossref, Europe PMC, arXiv), bilingual summaries, interactive mind maps, open-access PDF proxy, and native DSH conversation integration.",
   "exports": {
