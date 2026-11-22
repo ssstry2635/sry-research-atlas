@@ -1,8 +1,8 @@
-# 玻尔科学空间 · Bohr Research Atlas (`sry-research-atlas`)
+# SRY Research Atlas (`sry-research-atlas`)
 
-![Bohr Research Atlas Preview](docs/preview.svg)
+![SRY Research Atlas Preview](docs/preview.svg)
 
-**玻尔科学空间（Bohr Research Atlas）** 是一款专为 DeepSeek Harness（DSH）设计的发散式学术文献检索、双侧知识网络构建与原生对话联动工作台。它支持从任意学科的研究主题、材料体系、化学式、实验/算法路线或单篇 DOI 出发，自动联合检索全球主流开放学术库，派生“体系与概念谱系在左、方法与论文证据在右”的结构化知识图谱，并与 DSH 原生对话、Agent 工具链和本地论文知识库无缝协同。
+**SRY Research Atlas** 是一款专为 DeepSeek Harness（DSH）设计的发散式学术文献检索、双侧知识网络构建与原生对话联动工作台。它支持从任意学科的研究主题、材料体系、化学式、实验/算法路线或单篇 DOI 出发，自动联合检索全球主流开放学术库，派生“体系与概念谱系在左、方法与论文证据在右”的结构化知识图谱，并与 DSH 原生对话、Agent 工具链和本地论文知识库无缝协同。
 
 本仓库根目录即为**开箱即用的标准 DSH Bundle**（已包含预构建的 `client.js`、Host 服务 `index.js`、`cordis.patch.yml`、多语言元数据与预览图），克隆或从插件市场拉取后无需任何构建步骤、无需配置 API Key 即可直接在 DSH 中运行。
 

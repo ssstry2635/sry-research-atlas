@@ -1,7 +1,7 @@
 {
   "meta": {
-    "title": "玻尔科学空间",
-    "description": "在 DSH 主面板和原生对话中构建双侧材料知识网络，检索 OpenAlex、Crossref 与 arXiv 论文，生成中英概要、课题推荐和可追问思维导图，并提供合法开放获取的 PDF 入口。论文与课题数据保存在本机；检索和摘要需要网络与已配置的 DSH 模型。",
+    "title": "SRY Research Atlas",
+    "description": "在 DSH 主面板和原生对话中构建双侧科研知识网络，联合检索 OpenAlex、Crossref、Europe PMC 与 arXiv 论文，生成四级保底中英概要、课题推荐与关系型原文思维导图，并提供合法开放获取的 PDF 下载与追问联动。",
     "detail": "docs/DETAIL.zh.md"
   }
 }

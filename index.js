@@ -8,7 +8,7 @@ import { inflateRawSync, inflateSync } from 'node:zlib';
 
 const execFileAsync = promisify(execFile);
 
-export const name = 'bohr-research-atlas';
+export const name = 'sry-research-atlas';
 export const inject = ['tools', 'llm', 'agentDefaultModel', 'webServer'];
 
 const KB_PATH = join(homedir(), '.dsh', 'bohr-knowledge.json');
@@ -130,7 +130,7 @@ async function complete(ctx, { system, prompt, maxTokens = 900, signal }) {
     temperature: 0.2,
     maxTokens,
     signal,
-    purpose: 'bohr-research-atlas',
+    purpose: 'sry-research-atlas',
   })) {
     if (chunk.type === 'text-delta') text += chunk.text;
     if (chunk.type === 'finish' && (chunk.reason.kind === 'error' || chunk.reason.kind === 'aborted')) {
@@ -1379,7 +1379,7 @@ function registerKnowledgeTool(ctx) {
       }
       return { result: JSON.stringify({ papers: store.papers.slice(0, limit), total: store.papers.length }, null, 2) };
     },
-    presentCall: (args) => ({ card: 'generic', title: args.action === 'search' ? `查找玻尔知识库：${args.query || ''}` : '读取玻尔论文知识库', kind: 'search', rawInput: args }),
+    presentCall: (args) => ({ card: 'generic', title: args.action === 'search' ? `查找 SRY 论文知识库：${args.query || ''}` : '读取 SRY 论文知识库', kind: 'search', rawInput: args }),
   });
 }
 

@@ -14,12 +14,12 @@ interface ClientContext {
 
 export function apply(ctx: ClientContext) {
   const h = React.createElement;
-  let translate = (key: string) => key === 'panel' ? '玻尔科学空间' : key;
+  let translate = (key: string) => key === 'panel' ? 'SRY Research Atlas' : key;
   const locale = ctx.get('locale');
   if (locale) {
-    ctx.effect(() => locale.register('bohr-atlas', 'en', { panel: 'Bohr research atlas' }), 'bohr locale en');
-    ctx.effect(() => locale.register('bohr-atlas', 'zh-CN', { panel: '玻尔科学空间' }), 'bohr locale zh-CN');
-    translate = locale.bind('bohr-atlas');
+    ctx.effect(() => locale.register('sry-research-atlas', 'en', { panel: 'SRY Research Atlas' }), 'sry locale en');
+    ctx.effect(() => locale.register('sry-research-atlas', 'zh-CN', { panel: 'SRY Research Atlas' }), 'sry locale zh-CN');
+    translate = locale.bind('sry-research-atlas');
   }
 
   function PanelIcon({ size = 20 }: { size?: number }) {

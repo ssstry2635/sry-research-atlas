@@ -116,13 +116,13 @@ export function ConversationDock({ inputActions, input }: ConversationDockProps)
 
   return <section className="bohr-conversation-dock">
     <header>
-      <button className="bohr-conversation-toggle" onClick={toggle} aria-expanded={expanded}><FlaskConical size={15} /><strong>玻尔研究网络</strong><span>{sendError || '左右分支 · 论文证据 · 拖卡交给下方原生对话'}</span></button>
-      <button className="bohr-conversation-chevron" onClick={toggle} aria-label={expanded ? '收起玻尔研究网络' : '展开玻尔研究网络'}><ChevronDown className={expanded ? 'rotated' : ''} size={16} /></button>
+      <button className="bohr-conversation-toggle" onClick={toggle} aria-expanded={expanded}><FlaskConical size={15} /><strong>SRY Research Atlas</strong><span>{sendError || '左右分支 · 论文证据 · 拖卡交给下方原生对话'}</span></button>
+      <button className="bohr-conversation-chevron" onClick={toggle} aria-label={expanded ? '收起 SRY Research Atlas' : '展开 SRY Research Atlas'}><ChevronDown className={expanded ? 'rotated' : ''} size={16} /></button>
     </header>
     <div ref={popoverRef} className="bohr-floating-window" data-bohr-float style={{ left: geometry.left, top: geometry.top, width: geometry.width, height: geometry.height }}>
       <header>
-        <span><FlaskConical size={16} /><strong>玻尔研究网络</strong><em>边缘拖动位置 · 四角缩放 · 原生对话保持可用</em></span>
-        <button onClick={() => setExpanded(false)} aria-label="关闭玻尔研究窗口"><X size={17} /></button>
+        <span><FlaskConical size={16} /><strong>SRY Research Atlas</strong><em>边缘拖动位置 · 四角缩放 · 原生对话保持可用</em></span>
+        <button onClick={() => setExpanded(false)} aria-label="关闭 SRY Research Atlas 窗口"><X size={17} /></button>
       </header>
       {expanded && <div className="bohr-floating-body"><PluginApp embedded askNative={askNative} /></div>}
       {moveDirections.map((direction) => <div key={direction} className={`bohr-window-edge dir-${direction}`} role="button" tabIndex={-1} aria-label={`拖动${direction}边框移动窗口`} onPointerDown={startMove} onPointerMove={moveWindow} onPointerUp={endMove} />)}

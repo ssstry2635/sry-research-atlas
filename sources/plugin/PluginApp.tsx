@@ -249,10 +249,10 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
     };
   };
   const sendCardToNative = (card: ChatCard) => {
-    const prompt = `请用中文分析这张玻尔卡片。\n\n类型：${card.kind}\n标题：${card.title}\n概要：${card.summary}${card.url ? `\n原文：${card.url}` : ''}\n\n请说明它的科学问题、关键证据、适用边界，以及下一步值得验证或追问的方向。`;
+    const prompt = `请用中文分析这张 SRY Research Atlas 卡片。\n\n类型：${card.kind}\n标题：${card.title}\n概要：${card.summary}${card.url ? `\n原文：${card.url}` : ''}\n\n请说明它的科学问题、关键证据、适用边界，以及下一步值得验证或追问的方向。`;
     void handleSaveChatCard(card).finally(() => {
       if (askNative) askNative(prompt);
-      else setToast({ message: '请在 DSH 原生对话页打开玻尔悬浮窗，再发送到原生对话', error: true });
+      else setToast({ message: '请在 DSH 原生对话页打开 SRY Research Atlas 悬浮窗，再发送到原生对话', error: true });
     });
   };
   const openMindMap = async () => {
@@ -289,7 +289,7 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
       paperId: paper.id,
     }).finally(() => {
       if (askNative) askNative(prompt);
-      else setToast({ message: '请在 DSH 原生对话页展开玻尔研究网络，再从思维导图追问', error: true });
+      else setToast({ message: '请在 DSH 原生对话页展开 SRY Research Atlas，再从思维导图追问', error: true });
     });
   };
   const locateRecommendation = (recommendation: Recommendation) => {
@@ -311,7 +311,7 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
 
   return <div className={embedded ? 'bohr-dsh embedded' : 'bohr-dsh'}>
     <header className="bd-header">
-      <div className="bd-brand"><div className="bd-logo-orb"><AtlasMark /></div><div><strong>玻尔科学空间</strong><span>Bohr Research Atlas · 4.9</span></div></div>
+      <div className="bd-brand"><div className="bd-logo-orb"><AtlasMark /></div><div><strong>SRY Research Atlas</strong><span>发散式科研知识图谱工作台 · 4.9</span></div></div>
       <nav className="bd-navigation" aria-label="科研工作台视图">{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)} aria-current={view === id ? 'page' : undefined}><Icon size={15} /><span>{label}</span>{id === 'papers' && <em>{allPapers.length}</em>}{id === 'directions' && <em>{recommendations.length}</em>}{id === 'library' && savedPapers.length > 0 && <em>{savedPapers.length}</em>}</button>)}</nav>
       <form className="bd-search" role="search" onSubmit={(event) => { event.preventDefault(); if (searchInput.trim()) handleSearch(searchInput.trim()); }}>
         {loading ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />}

@@ -1,7 +1,7 @@
 {
   "meta": {
-    "title": "Bohr Research Atlas",
-    "description": "Build a bilateral materials knowledge network in the DSH main panel and native conversation, search OpenAlex, Crossref and arXiv, generate bilingual summaries, research recommendations and interactive mind maps, and open legal open-access PDFs. Papers and project notes stay on this machine; retrieval and summaries require network access and a configured DSH model.",
+    "title": "SRY Research Atlas",
+    "description": "Build a bilateral research knowledge network in the DSH main panel and native conversation, search OpenAlex, Crossref, Europe PMC and arXiv, generate bilingual summaries, research recommendations and relational verbatim mind maps, and download legal open-access PDFs.",
     "detail": "docs/DETAIL.md"
   }
 }
