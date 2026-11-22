@@ -70,12 +70,12 @@
       },
       "versions": [
         {
-          "version": "4.8.0",
-          "publishTimestamp": 1795350000,
+          "version": "4.9.0",
+          "publishTimestamp": 1795358000,
           "source": {
             "type": "git",
             "url": "https://github.com/ssstry2635/sry-research-atlas",
-            "commit": "693bea5b25bf8e6bf784943ffdbf129177db8a49"
+            "commit": "0e516123ca30de94948098569cee266549005c70"
           },
           "engines": {
             "dsh": ">=0.2.2-rc.5 <0.3.0-0"
