@@ -63,6 +63,9 @@
 .bd-navigation button.active { color: var(--bd-brand); font-weight: 600; }
 .bd-navigation button.active:after { background: var(--bd-brand); }
 .bd-navigation em { min-width: 17px; padding: 1px 4px; color: var(--bd-muted); background: var(--dsw-alias-bg-layer-2); border-radius: 8px; font-size: 8px; font-style: normal; text-align: center; }
+.bd-quick-topics { display: flex; align-items: center; gap: 6px; margin-left: auto; overflow-x: auto; padding: 4px 0; }
+.bd-quick-topics button { height: 25px; padding: 0 9px; color: var(--bd-muted); background: var(--dsw-alias-bg-base); border: 1px solid var(--bd-line); border-radius: 13px; font-size: 9px; white-space: nowrap; transition: border-color .15s, color .15s; }
+.bd-quick-topics button:hover { color: var(--bd-brand); border-color: var(--bd-brand); }
 .bd-project { display: flex; align-items: center; gap: 8px; max-width: 290px; padding: 5px 0 5px 16px; text-align: left; border-left: 1px solid var(--bd-line); color: var(--bd-muted); }
 .bd-project > span { min-width: 0; display: flex; flex-direction: column; }
 .bd-project small { font-size: 8px; }
@@ -345,7 +348,7 @@
 .bohr-window-resize.dir-se { right: -5px; bottom: -5px; width: 18px; height: 18px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 0 48%, var(--bd-line-strong) 49% 54%, transparent 55% 64%, var(--bd-line-strong) 65% 70%, transparent 71%); }
 .bohr-window-resize.dir-sw { left: -5px; bottom: -5px; width: 16px; height: 16px; cursor: nesw-resize; }
 .bohr-dsh.embedded .bd-header { grid-template-columns: minmax(180px, 1fr); min-height: 48px; padding: 0 12px; }
-.bohr-dsh.embedded .bd-brand, .bohr-dsh.embedded .bd-header-actions, .bohr-dsh.embedded .bd-project { display: none; }
+.bohr-dsh.embedded .bd-brand, .bohr-dsh.embedded .bd-header-actions, .bohr-dsh.embedded .bd-project, .bohr-dsh.embedded .bd-quick-topics { display: none; }
 .bohr-dsh.embedded .bd-subbar { min-height: 38px; justify-content: center; padding: 0 10px; }
 .bohr-dsh.embedded .bd-navigation { gap: 16px; }
 .bohr-dsh.embedded .bd-map-layout { grid-template-columns: minmax(0, 1fr) 292px; }
@@ -432,6 +435,7 @@
   .bd-header { grid-template-columns: auto minmax(230px, 1fr) auto; gap: 12px; padding: 0 16px; }
   .bd-brand span { display: none; }
   .bd-subbar { padding: 0 16px; }
+  .bd-quick-topics { display: none; }
   .bd-map-layout { grid-template-columns: minmax(0, 1fr) 310px; }
   .bohr-dsh .graph-workspace { padding-left: 15px; padding-right: 15px; }
   .bohr-dsh .workspace-heading p { display: none; }

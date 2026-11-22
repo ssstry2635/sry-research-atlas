@@ -1,6 +1,7 @@
 {
   "meta": {
-    "title": "Bohr research atlas",
-    "description": "Explore material families, synthesis methods and traceable papers in a divergent research workbench."
+    "title": "Bohr Research Atlas",
+    "description": "Build a bilateral materials knowledge network in the DSH main panel and native conversation, search OpenAlex, Crossref and arXiv, generate bilingual summaries, research recommendations and interactive mind maps, and open legal open-access PDFs. Papers and project notes stay on this machine; retrieval and summaries require network access and a configured DSH model.",
+    "detail": "docs/DETAIL.md"
   }
 }

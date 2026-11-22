@@ -11,9 +11,11 @@ export interface Paper {
   citations: number;
   doi?: string;
   url: string;
+  landingUrl?: string;
+  pdfUrl?: string;
   abstract?: string;
   openAccess: boolean;
-  source: 'OpenAlex' | 'Crossref' | '演示数据';
+  source: 'OpenAlex' | 'Crossref' | 'arXiv' | 'Europe PMC' | '演示数据';
   query?: string;
   summaryEn?: string;
   summaryZh?: string;
@@ -34,6 +36,7 @@ export interface MindMap {
   summary: string;
   nodes: MindMapNode[];
   edges?: Array<[string, string]>;
+  generatedBy?: 'model' | 'fallback';
 }
 
 export interface ChatCard {

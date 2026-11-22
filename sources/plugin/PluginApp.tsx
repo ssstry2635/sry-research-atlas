@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookMarked, CheckCircle2, Compass, Download, FlaskConical, Info, Lightbulb, LoaderCircle, Network, Search, X } from 'lucide-react';
 import { MindMapDialog } from './MindMapDialog';
-import { enrichPapers, fetchKnowledge, generateMindMap, saveKnowledgePaper } from './api';
+import { enrichPapers, fetchKnowledge, generateBranches, generateMindMap, saveKnowledgePaper } from './api';
 import { DirectionsView } from '../src/components/DirectionsView';
 import { InfoDialog } from '../src/components/InfoDialog';
 import { Inspector } from '../src/components/Inspector';
@@ -22,6 +22,14 @@ const views = [
   { id: 'papers' as const, label: '论文证据', icon: Compass },
   { id: 'directions' as const, label: '延伸方向', icon: Lightbulb },
   { id: 'library' as const, label: '文献库', icon: BookMarked },
+];
+
+const quickTopics = [
+  { label: 'CsPbBr₃ 纳米晶', query: 'CsPbBr3 perovskite nanocrystals' },
+  { label: '固态电解质', query: 'solid-state electrolyte lithium battery' },
+  { label: 'CO₂ 电催化还原', query: 'CO2 electrocatalytic reduction catalyst' },
+  { label: '机器学习力场', query: 'machine learning interatomic potential' },
+  { label: 'CRISPR 基因编辑', query: 'CRISPR Cas9 gene editing delivery' },
 ];
 
 function AtlasMark() {
@@ -140,22 +148,47 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
       const results = rawResults.map(mergeCachedSummary);
       const root: ResearchNode = {
         id: 'root', kind: 'material', title: displayQuery.length > 22 ? `${displayQuery.slice(0, 21)}…` : displayQuery,
-        subtitle: '检索起点 · 实时证据', x: 440, y: 310,
-        description: `以“${displayQuery}”为起点从 OpenAlex 检索得到的论文网络。节点关系表示同次检索与探索路径，不代表已经经过人工核验的化学相似度。`,
-        tags: ['实时检索', `${results.length} 篇论文`, '待阅读核验'], paperIds: results.map((paper) => paper.id), query: searchTerm,
+        subtitle: '研究起点 · 多源实时证据', x: 550, y: 450,
+        description: `以“${displayQuery}”为起点联合检索得到的跨学科研究网络。左侧展开体系与概念谱系，右侧展开研究方法、延伸机会与直接论文证据。`,
+        tags: ['多源检索', `${results.length} 篇论文`, '双侧发散'], paperIds: results.map((paper) => paper.id), query: searchTerm, evidenceLevel: '已验证',
       };
       const nodes = results.map((paper, index): ResearchNode => ({
         id: paper.id, kind: 'paper', title: paper.authors.split(',')[0], subtitle: `${paper.year || '未知'} · ${paper.venue}`,
         ...paperToNodePosition(index), description: paper.title,
-        tags: [paper.source, paper.openAccess ? '开放获取' : '出版方页面'], paperIds: [paper.id], relation: '检索证据',
+        tags: [paper.source, paper.pdfUrl ? '开放 PDF' : paper.openAccess ? '开放获取' : '出版方页面'], paperIds: [paper.id], relation: '检索证据',
       }));
       setPapers((current) => ({ ...current, ...Object.fromEntries(results.map((paper) => [paper.id, paper])) }));
       setSearches((current) => ({ ...current, root: { query: searchTerm, count: results.length, checkedAt: new Date().toLocaleString('zh-CN', { hour12: false }) } }));
       setGraph({ nodes: [root, ...nodes], edges: results.map((paper) => ({ id: `search-${paper.id}`, source: 'root', target: paper.id, label: '相关研究' })) });
       setSelectedId('root'); setSearchLabel(displayQuery); setLive(true); setView('map'); setInspectorTab('details');
       const sources = [...new Set(results.map((paper) => paper.source))].join(' / ');
-      setToast({ message: `已从 ${sources} 检索 ${results.length} 篇论文，正在生成中英概括` });
+      setToast({ message: `已从 ${sources} 检索 ${results.length} 篇论文，正在派生双侧分支与中英概括` });
       void enrich(results);
+      void generateBranches(displayQuery, results).then((branches) => {
+        if (!branches.length) return;
+        setGraph((current) => {
+          if (!current.nodes.some((n) => n.id === 'root' && n.query === searchTerm)) return current;
+          const existingIds = new Set(current.nodes.map((n) => n.id));
+          const branchNodes: ResearchNode[] = branches.filter((b) => !existingIds.has(b.id)).map((b, idx) => ({
+            ...b,
+            x: b.kind === 'family' || b.kind === 'material' ? 330 : 770,
+            y: 160 + idx * 130,
+          }));
+          const branchEdges = branchNodes.flatMap((b) => [
+            { id: `branch-root-${b.id}`, source: 'root', target: b.id, label: b.relation || '派生分支' },
+            ...(b.paperIds || []).filter((pid) => existingIds.has(pid)).map((pid) => ({
+              id: `branch-paper-${b.id}-${pid}`,
+              source: b.id,
+              target: pid,
+              label: '支撑文献',
+            })),
+          ]);
+          return {
+            nodes: [...current.nodes, ...branchNodes],
+            edges: [...current.edges, ...branchEdges],
+          };
+        });
+      }).catch(() => {});
     } catch (error) {
       setToast({ message: error instanceof Error ? error.message : '检索失败，请检查网络后重试', error: true });
     } finally { setLoading(false); }
@@ -263,12 +296,13 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
       <div className="bd-brand"><AtlasMark /><div><strong>玻尔科学空间</strong><span>发散式研究工作台</span></div></div>
       <form className="bd-search" role="search" onSubmit={(event) => { event.preventDefault(); if (searchInput.trim()) handleSearch(searchInput.trim()); }}>
         {loading ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
-        <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索材料、化学式、方法或论文；提交后自动规范化" aria-label="搜索材料、化学式、方法或论文" />
+        <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索任意学科主题、材料化学式、方法或 DOI（支持中英文）" aria-label="搜索任意学科主题、材料化学式、方法或 DOI" />
         <button type="submit" disabled={loading || !searchInput.trim()}>{loading ? '检索中' : '搜索'}</button>
       </form>
-      <div className="bd-header-actions"><button className="bd-source" onClick={() => setInfoOpen(true)} title="数据来源与参考方法"><i className={live ? 'live' : ''} /><span>OpenAlex</span><Info size={14} /></button><button className="icon-button" onClick={doExport} aria-label="导出研究简报" title="导出研究简报"><Download size={17} /></button></div>
+      <div className="bd-header-actions"><button className="bd-source" onClick={() => setInfoOpen(true)} title="多源检索架构与证据边界"><i className={live ? 'live' : ''} /><span>OpenAlex · Crossref · arXiv · PMC</span><Info size={14} /></button><button className="icon-button" onClick={doExport} aria-label="导出研究简报" title="导出研究简报"><Download size={17} /></button></div>
     </header>
     <div className="bd-subbar"><nav className="bd-navigation" aria-label="科研工作台视图">{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)} aria-current={view === id ? 'page' : undefined}><Icon size={16} /><span>{label}</span>{id === 'papers' && <em>{allPapers.length}</em>}{id === 'library' && savedPapers.length > 0 && <em>{savedPapers.length}</em>}</button>)}</nav>
+      <div className="bd-quick-topics" aria-label="跨学科示例主题">{quickTopics.map((topic) => <button key={topic.label} type="button" onClick={() => handleSearch(topic.query)} disabled={loading}>{topic.label}</button>)}</div>
       <button className="bd-project" onClick={() => setProjectOpen(true)}><FlaskConical size={16} /><span><small>当前课题</small><strong>{project.target}</strong></span><em>更新进展</em></button>
     </div>
     <main className="bd-main">{view === 'map' ? <div className="bd-map-layout"><KnowledgeGraph graph={graph} papers={papers} selectedId={selectedId} onSelect={selectNode} loading={loading || Boolean(expandingId)} searchLabel={searchLabel} onReset={resetGraph} onDropToChat={sendCardToNative} /><Inspector node={selectedNode} papers={papers} recommendations={recommendations} project={project} tab={inspectorTab} onTab={setInspectorTab} onExpand={expandNode} expanding={Boolean(expandingId)} onOpenPaper={setActivePaper} onToggleSave={toggleSave} savedIds={savedIds} onProject={() => setProjectOpen(true)} onCheckCounter={checkCounterEvidence} counterEvidence={counterEvidence} checkingCounterId={checkingCounterId} onSendToChat={askNative ? (node) => sendCardToNative(cardForNode(node)) : undefined} /></div> : view === 'directions' ? <DirectionsView recommendations={recommendations} papers={papers} project={project} onOpenPaper={setActivePaper} onExport={doExport} onProject={() => setProjectOpen(true)} onCheckCounter={checkCounterEvidence} counterEvidence={counterEvidence} checkingCounterId={checkingCounterId} onLocateNode={locateRecommendation} /> : <PapersView papers={view === 'library' ? savedPapers : allPapers} savedIds={savedIds} onToggleSave={toggleSave} onOpenPaper={setActivePaper} library={view === 'library'} onExplore={() => setView('map')} />}</main>

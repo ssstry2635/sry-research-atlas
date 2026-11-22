@@ -30,7 +30,7 @@ function scoreNode(node: ResearchNode, project: ProjectContext, papers: Record<s
   const feasibilityBase = node.evidenceLevel === '已验证' ? 84 : node.evidenceLevel === '迁移线索' ? 72 : 56;
   const feasibility = clamp(feasibilityBase + constraintHits * 3 - (node.id === 'method-micro' ? 8 : 0));
   const linkedPapers = node.paperIds.map((id) => papers[id]).filter(Boolean);
-  const liveCount = linkedPapers.filter((paper) => paper.source === 'OpenAlex').length;
+  const liveCount = linkedPapers.filter((paper) => paper.source !== '演示数据').length;
   const recentCount = linkedPapers.filter((paper) => (paper.year || 0) >= 2020).length;
   const evidence = clamp(38 + Math.min(linkedPapers.length, 6) * 7 + liveCount * 3 + recentCount * 3);
   const novelty = node.evidenceLevel === '待验证' ? 92 : node.evidenceLevel === '迁移线索' ? 76 : 54;
@@ -42,8 +42,8 @@ function totalScore(score: ScoreBreakdown) {
 }
 
 function scopeForNode(node: ResearchNode, searches: Record<string, SearchRecord>) {
-  const record = searches[node.id];
-  if (record) return `OpenAlex 关键词“${record.query}”，返回 ${record.count} 篇元数据；核查于 ${record.checkedAt}，未覆盖全文，未发现不等于不存在。`;
+  const record = searches[node.id] || searches.root;
+  if (record) return `多源学术索引（OpenAlex / Crossref / Europe PMC / arXiv）关键词“${record.query}”，返回 ${record.count} 篇元数据；核查于 ${record.checkedAt}，未覆盖受付费墙保护的全文，未发现不等于不存在。`;
   return '当前仅使用精选示例关系与关联文献，尚未执行该方向的系统检索，不能据此宣称研究空白。';
 }
 
@@ -95,7 +95,7 @@ export function buildRecommendations(graph: GraphData, project: ProjectContext, 
     return node ? [enrichRecommendation(base, node, project, papers, searches)] : [];
   });
   const knownSources = new Set(Object.values(sourceForRecommendation));
-  const generic = graph.nodes.filter((node) => (node.kind === 'method' || node.kind === 'opportunity') && !knownSources.has(node.id) && node.id !== 'method-hot').map((node) => genericRecommendation(node, project, papers, searches));
+  const generic = graph.nodes.filter((node) => (node.kind === 'method' || node.kind === 'opportunity' || node.id.startsWith('dyn-')) && !knownSources.has(node.id) && node.id !== 'method-hot').map((node) => genericRecommendation(node, project, papers, searches));
   if (!enriched.length && !generic.length) {
     const root = nodes.get('root');
     if (root) {

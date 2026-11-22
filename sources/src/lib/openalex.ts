@@ -11,6 +11,7 @@ type OpenAlexWork = {
   authorships?: OpenAlexAuthor[];
   primary_location?: { source?: { display_name?: string }; landing_page_url?: string };
   open_access?: { is_oa?: boolean; oa_url?: string };
+  best_oa_location?: { pdf_url?: string };
   abstract_inverted_index?: Record<string, number[]>;
 };
 
@@ -31,6 +32,9 @@ function normalize(work: OpenAlexWork, query: string): Paper | null {
   const names = (work.authorships || []).map((item) => item.author?.display_name).filter(Boolean) as string[];
   const authors = names.length > 3 ? `${names.slice(0, 3).join(', ')} 等` : names.join(', ') || '作者信息未提供';
   const doi = work.doi?.replace(/^https?:\/\/doi\.org\//i, '');
+  const oaUrl = work.open_access?.oa_url;
+  const pdfUrl = work.best_oa_location?.pdf_url || (/\.pdf(?:$|\?)/i.test(oaUrl || '') ? oaUrl : undefined);
+  const landingUrl = work.primary_location?.landing_page_url || work.doi || work.id;
   return {
     id: work.id,
     title,
@@ -39,7 +43,9 @@ function normalize(work: OpenAlexWork, query: string): Paper | null {
     venue: work.primary_location?.source?.display_name || '期刊信息未提供',
     citations: work.cited_by_count || 0,
     doi,
-    url: work.open_access?.oa_url || work.doi || work.primary_location?.landing_page_url || work.id,
+    url: pdfUrl || landingUrl,
+    landingUrl,
+    pdfUrl,
     abstract: abstractFromIndex(work.abstract_inverted_index),
     openAccess: Boolean(work.open_access?.is_oa),
     source: 'OpenAlex',
@@ -58,6 +64,9 @@ type CrossrefItem = {
   abstract?: string;
   'is-referenced-by-count'?: number;
   URL?: string;
+  link?: Array<{ URL?: string; 'content-type'?: string }>;
+  license?: Array<{ URL?: string }>;
+  resource?: { primary?: { URL?: string } };
 };
 
 function crossrefYear(item: CrossrefItem) {
@@ -71,6 +80,9 @@ function normalizeCrossref(item: CrossrefItem, query: string): Paper | null {
   const doi = item.DOI;
   if (!title || doi?.endsWith('.s001')) return null;
   const names = (item.author || []).map((author) => [author.given, author.family].filter(Boolean).join(' ')).filter(Boolean);
+  const openLicense = (item.license || []).some((license) => String(license?.URL || '').includes('creativecommons.org'));
+  const pdfLink = (item.link || []).find((link) => String(link?.['content-type'] || '').includes('pdf'))?.URL;
+  const landingUrl = item.resource?.primary?.URL || (doi ? `https://doi.org/${doi}` : item.URL || 'https://www.crossref.org/');
   return {
     id: doi ? `doi:${doi}` : `crossref:${title}`,
     title: title.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(),
@@ -79,9 +91,11 @@ function normalizeCrossref(item: CrossrefItem, query: string): Paper | null {
     venue: item['container-title']?.[0] || '期刊信息未提供',
     citations: Number(item['is-referenced-by-count']) || 0,
     doi,
-    url: doi ? `https://doi.org/${doi}` : item.URL || 'https://www.crossref.org/',
+    url: openLicense && pdfLink ? pdfLink : landingUrl,
+    landingUrl,
+    pdfUrl: openLicense && pdfLink ? pdfLink : undefined,
     abstract: (item.abstract || '').replace(/<[^>]+>/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim() || undefined,
-    openAccess: false,
+    openAccess: openLicense,
     source: 'Crossref',
     query,
   };
@@ -101,7 +115,7 @@ async function searchOpenAlexDirect(query: string, signal?: AbortSignal): Promis
   const params = new URLSearchParams({
     search: query.trim(),
     'per-page': '8',
-    select: 'id,doi,title,display_name,publication_year,cited_by_count,authorships,primary_location,open_access,abstract_inverted_index',
+    select: 'id,doi,title,display_name,publication_year,cited_by_count,authorships,primary_location,open_access,best_oa_location,abstract_inverted_index',
   });
   const response = await fetch(`${endpoint}?${params.toString()}`, { signal, headers: { Accept: 'application/json' } });
   if (!response.ok) throw new Error(`OpenAlex 返回 ${response.status}`);
@@ -114,7 +128,7 @@ async function searchCrossrefDirect(query: string, signal?: AbortSignal): Promis
     'query.bibliographic': query,
     rows: '8',
     filter: 'type:journal-article',
-    select: 'DOI,title,author,issued,published-print,published-online,container-title,abstract,is-referenced-by-count,URL,type',
+    select: 'DOI,title,author,issued,published-print,published-online,container-title,abstract,is-referenced-by-count,URL,type,link,license,resource',
   });
   const response = await fetch(`https://api.crossref.org/works?${params.toString()}`, {
     signal,

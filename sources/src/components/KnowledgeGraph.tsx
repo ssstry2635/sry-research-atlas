@@ -91,11 +91,12 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
 
   useEffect(() => {
     setPositions((current) => {
+      const hasDynamicBranch = visibleNodes.some((node) => node.id.startsWith('dyn-') && !current[node.id]);
       const missing = visibleNodes.filter((node) => !current[node.id]);
       if (!missing.length) return current;
       const next = { ...current };
-      if (!Object.keys(current).length) {
-        missing.forEach((node) => { const anchor = anchors.get(node.id); if (anchor) next[node.id] = anchor; });
+      if (!Object.keys(current).length || hasDynamicBranch) {
+        visibleNodes.forEach((node) => { const anchor = anchors.get(node.id); if (anchor) next[node.id] = anchor; });
         return next;
       }
       const groups = new Map<string, ResearchNode[]>();
@@ -318,7 +319,7 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
       <div className="graph-legend" aria-label="节点图例">{allKinds.map((kind) => <span key={kind}><i className={`legend-mark ${kind}`} />{kindLabels[kind]}</span>)}</div>
       {scopedPapers.length > PAPERS_PER_PAGE && <div className="paper-pager"><button disabled={paperPage === 0} onClick={() => setPaperPage((page) => Math.max(0, page - 1))} aria-label="上一页论文"><ChevronLeft size={14} /></button><span>{paperPage + 1} / {pageCount}</span><button disabled={paperPage >= pageCount - 1} onClick={() => setPaperPage((page) => Math.min(pageCount - 1, page + 1))} aria-label="下一页论文"><ChevronRight size={14} /></button></div>}
       {paperHover && <div className={paperHover.flip ? 'paper-hover flip' : 'paper-hover'} style={{ left: paperHover.left, top: paperHover.top }} role="tooltip">
-        <div className="paper-hover-type"><span>论文证据</span><em>{paperHover.paper?.year || '年份未知'} · {paperHover.paper?.venue || '期刊未知'}</em></div>
+        <div className="paper-hover-type"><span>{paperHover.paper?.source || '论文证据'}{paperHover.paper?.pdfUrl ? ' · 开放 PDF' : paperHover.paper?.openAccess ? ' · OA' : ''}</span><em>{paperHover.paper?.year || '年份未知'} · {paperHover.paper?.venue || '期刊未知'}</em></div>
         <h3>{paperHover.paper?.title || paperHover.node.description}</h3>
         <p className="paper-hover-authors">{paperHover.paper?.authors || paperHover.node.title}</p>
         <section><span>英文概括</span><p>{paperHover.paper?.summaryEn || paperHover.paper?.abstract?.slice(0, 320) || '暂无英文摘要；请打开原文核对。'}</p></section>

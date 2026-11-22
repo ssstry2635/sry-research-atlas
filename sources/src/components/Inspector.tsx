@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ArrowUpRight, Bookmark, BookOpen, ChevronDown, ChevronRight, FlaskConical, LoaderCircle, Network, PencilLine, Quote, SearchCheck, Send, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Bookmark, BookOpen, ChevronDown, ChevronRight, Download, FlaskConical, LoaderCircle, Network, PencilLine, Quote, SearchCheck, Send, Sparkles } from 'lucide-react';
 import type { Paper, ProjectContext, Recommendation, ResearchNode } from '../types';
+import { paperOriginalHref, paperPdfHref } from '../lib/paper-links';
 
 interface InspectorProps {
   node?: ResearchNode;
@@ -75,8 +76,8 @@ export function Inspector({ node, papers, recommendations, project, tab, onTab, 
           {onSendToChat && <button className="secondary-action full-width" onClick={() => onSendToChat(node)}><Send size={15} />发送到 DSH 原生对话</button>}
           <section className="node-evidence"><div className="node-evidence-heading"><h3>关联原文</h3><span>{relatedPapers.length} 篇</span></div>
             {relatedPapers.length ? relatedPapers.map((paper) => <article className="compact-paper" key={paper.id}>
-              <button onClick={() => onOpenPaper(paper)}><strong>{paper.title}</strong><small>{paper.authors}</small><span>{paper.venue} · {paper.year || '年份未知'} · 被引 {paper.citations.toLocaleString()}</span></button>
-              <div><button className={savedIds.includes(paper.id) ? 'saved' : ''} onClick={() => onToggleSave(paper)} aria-label={savedIds.includes(paper.id) ? '取消收藏' : '收藏论文'}><Bookmark size={14} fill={savedIds.includes(paper.id) ? 'currentColor' : 'none'} /></button><a href={paper.url} target="_blank" rel="noreferrer" aria-label="打开论文原文"><ArrowUpRight size={15} /></a></div>
+              <button onClick={() => onOpenPaper(paper)}><strong>{paper.title}</strong><small>{paper.authors}</small><span>{paper.source} · {paper.venue} · {paper.year || '年份未知'} · 被引 {paper.citations.toLocaleString()}{paper.pdfUrl ? ' · 开放 PDF' : ''}</span></button>
+              <div><button className={savedIds.includes(paper.id) ? 'saved' : ''} onClick={() => onToggleSave(paper)} aria-label={savedIds.includes(paper.id) ? '取消收藏' : '收藏论文'}><Bookmark size={14} fill={savedIds.includes(paper.id) ? 'currentColor' : 'none'} /></button>{paperPdfHref(paper) && <a href={paperPdfHref(paper)} target="_blank" rel="noreferrer" aria-label="下载开放 PDF" title="下载开放 PDF"><Download size={14} /></a>}<a href={paperOriginalHref(paper)} target="_blank" rel="noreferrer" aria-label="打开论文原文" title="打开论文原文"><ArrowUpRight size={15} /></a></div>
             </article>) : <div className="compact-empty"><BookOpen size={22} /><p>尚未展开论文证据。检索后，原文入口会保留在这里。</p></div>}
           </section>
         </> : <div className="compact-empty"><p>从图谱中选择一个节点查看详情。</p></div>}

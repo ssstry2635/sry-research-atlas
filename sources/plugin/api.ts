@@ -1,4 +1,4 @@
-import type { MindMap, Paper } from '../src/types';
+import type { MindMap, Paper, ResearchNode } from '../src/types';
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/bohr-api/${path}`, {
@@ -42,4 +42,15 @@ export async function generateMindMap(paper: Paper): Promise<MindMap> {
     method: 'POST',
     body: JSON.stringify({ paper }),
   });
+}
+
+export async function generateBranches(query: string, papers: Paper[]): Promise<Array<Omit<ResearchNode, 'x' | 'y'>>> {
+  const payload = await requestJson<{ branches?: Array<Omit<ResearchNode, 'x' | 'y'>> }>('branches', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      papers: papers.map((p) => ({ id: p.id, title: p.title, venue: p.venue, year: p.year })),
+    }),
+  });
+  return payload.branches || [];
 }

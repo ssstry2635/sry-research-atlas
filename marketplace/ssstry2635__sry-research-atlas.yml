@@ -1,0 +1,7 @@
+url: https://github.com/ssstry2635/sry-research-atlas
+name: sry-research-atlas
+category: research
+description:
+  en: Bilateral research knowledge graph, multi-source scholarly retrieval (OpenAlex, Crossref, Europe PMC, arXiv), bilingual paper summaries, interactive mind maps, open-access PDF access, and native DSH conversation integration.
+  zh: 玻尔科学空间：双侧科研知识图谱、四源学术文献检索（OpenAlex/Crossref/Europe PMC/arXiv）、中英双语概括、抗截断可追问思维导图、合法开放 PDF 下载与 DSH 原生对话悬浮窗联动工作台。
+icon: icon.svg

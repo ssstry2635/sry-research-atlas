@@ -50,7 +50,7 @@ export function MindMapDialog({ paper, mindMap, onClose, onAsk }: MindMapDialogP
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="modal mindmap-dialog" role="dialog" aria-modal="true" aria-labelledby="mindmap-title">
       <header><span className="modal-icon"><BookOpen size={19} /></span><div><span className="section-kicker">读完论文后继续追问</span><h2 id="mindmap-title">论文思维导图 · {mindMap.title}</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭思维导图"><X size={18} /></button></header>
-      <p className="mindmap-summary">{mindMap.summary}</p>
+      <p className="mindmap-summary">{mindMap.generatedBy === 'fallback' ? '模型结构化输出未完成，已根据题目与已有概要生成基础导图；请回溯原文核验。' : ''}{mindMap.generatedBy === 'fallback' ? ' ' : ''}{mindMap.summary}</p>
       <div className="mindmap-canvas">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label="论文思维导图，点击节点查看并追问">
           {mindMap.nodes.map((node) => {

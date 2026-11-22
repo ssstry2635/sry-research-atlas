@@ -1,9 +1,8 @@
 {
-  "name": "@local/bohr-research-atlas",
-  "version": "4.5.2",
-  "private": true,
+  "name": "sry-research-atlas",
+  "version": "4.7.0",
   "type": "module",
-  "description": "玻尔科学空间：双侧材料知识网络、论文检索与 DSH 原生对话联动工作台",
+  "description": "Bohr Research Atlas (玻尔科学空间): bilateral knowledge graph, multi-source scholarly retrieval (OpenAlex, Crossref, Europe PMC, arXiv), bilingual summaries, interactive mind maps, open-access PDF proxy, and native DSH conversation integration.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -16,11 +15,41 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "docs",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "build:client": "node scripts/build-client.mjs"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "research",
+    "knowledge-graph",
+    "literature-review",
+    "materials-science",
+    "chemistry",
+    "open-access",
+    "paper-search",
+    "mind-map"
+  ],
+  "author": "ssstry2635",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssstry2635/sry-research-atlas.git"
+  },
+  "homepage": "https://github.com/ssstry2635/sry-research-atlas#readme",
+  "bugs": {
+    "url": "https://github.com/ssstry2635/sry-research-atlas/issues"
+  },
+  "engines": {
+    "dsh": ">=0.2.2-rc.5 <0.3.0-0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
