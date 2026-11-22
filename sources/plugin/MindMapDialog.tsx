@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, BookOpen, MessageCircleQuestion, X } from 'lucide-react';
+import { ArrowRight, BookOpen, MessageCircleQuestion, Minus, Plus, RotateCcw, X } from 'lucide-react';
 import type { MindMap, MindMapNode, Paper } from '../src/types';
 
 interface MindMapDialogProps {
@@ -9,10 +9,10 @@ interface MindMapDialogProps {
   onAsk: (paper: Paper, node: MindMapNode) => void;
 }
 
-const WIDTH = 980;
-const HEIGHT = 620;
-const NODE_WIDTH = 196;
-const NODE_HEIGHT = 74;
+const WIDTH = 1020;
+const HEIGHT = 580;
+const NODE_WIDTH = 216;
+const NODE_HEIGHT = 82;
 
 function computeLayout(nodes: MindMapNode[]) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -33,11 +33,11 @@ function computeLayout(nodes: MindMapNode[]) {
     groups.get(level)!.push(node);
   });
   const positions = new Map<string, { x: number; y: number; level: number }>();
-  const columnX = [50, 310, 580, 820];
+  const columnX = [46, 330, 620, 780];
   groups.forEach((group, level) => {
-    const step = group.length > 1 ? Math.min(132, (HEIGHT - 120) / (group.length - 1)) : 0;
+    const step = group.length > 1 ? Math.min(126, (HEIGHT - 120) / (group.length - 1)) : 0;
     const totalHeight = step * (group.length - 1);
-    const startY = HEIGHT / 2 - totalHeight / 2;
+    const startY = HEIGHT / 2 - totalHeight / 2 - NODE_HEIGHT / 2;
     group.forEach((node, index) => positions.set(node.id, { x: columnX[Math.min(level, columnX.length - 1)], y: startY + index * step, level }));
   });
   return positions;
@@ -45,37 +45,63 @@ function computeLayout(nodes: MindMapNode[]) {
 
 export function MindMapDialog({ paper, mindMap, onClose, onAsk }: MindMapDialogProps) {
   const [selectedId, setSelectedId] = useState(mindMap.nodes[0]?.id);
+  const [zoom, setZoom] = useState(1);
   const positions = useMemo(() => computeLayout(mindMap.nodes), [mindMap.nodes]);
-  const selected = mindMap.nodes.find((node) => node.id === selectedId);
+  const selected = mindMap.nodes.find((node) => node.id === selectedId) || mindMap.nodes[0];
+
   return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="modal mindmap-dialog" role="dialog" aria-modal="true" aria-labelledby="mindmap-title">
-      <header><span className="modal-icon"><BookOpen size={19} /></span><div><span className="section-kicker">读完论文后继续追问</span><h2 id="mindmap-title">论文思维导图 · {mindMap.title}</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭思维导图"><X size={18} /></button></header>
-      <p className="mindmap-summary">{mindMap.generatedBy === 'fallback' ? '模型结构化输出未完成，已根据题目与已有概要生成基础导图；请回溯原文核验。' : ''}{mindMap.generatedBy === 'fallback' ? ' ' : ''}{mindMap.summary}</p>
+      <header>
+        <span className="modal-icon"><BookOpen size={19} /></span>
+        <div>
+          <span className="section-kicker">交互式论文结构拆解 · 点击节点向 DSH 深度追问</span>
+          <h2 id="mindmap-title">{mindMap.title}</h2>
+        </div>
+        <div className="mindmap-zoom-bar">
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.75, z - 0.12))} aria-label="缩小导图"><Minus size={14} /></button>
+          <span>{Math.round(zoom * 100)}%</span>
+          <button type="button" onClick={() => setZoom((z) => Math.min(1.45, z + 0.12))} aria-label="放大导图"><Plus size={14} /></button>
+          <button type="button" onClick={() => setZoom(1)} aria-label="重置缩放"><RotateCcw size={13} /></button>
+        </div>
+        <button className="icon-button" onClick={onClose} aria-label="关闭思维导图"><X size={18} /></button>
+      </header>
+      <p className="mindmap-summary">{mindMap.generatedBy === 'fallback' ? '模型结构化输出未完成，已根据题目与已有概要生成基础阅读框架；请结合原文核验。 ' : ''}{mindMap.summary}</p>
       <div className="mindmap-canvas">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label="论文思维导图，点击节点查看并追问">
-          {mindMap.nodes.map((node) => {
-            if (!node.parentId) return null;
-            const parent = positions.get(node.parentId); const child = positions.get(node.id);
-            if (!parent || !child) return null;
-            const fromX = parent.x + NODE_WIDTH; const fromY = parent.y + NODE_HEIGHT / 2;
-            const toX = child.x; const toY = child.y + NODE_HEIGHT / 2; const mid = (fromX + toX) / 2;
-            return <path key={`${node.parentId}-${node.id}`} d={`M ${fromX} ${fromY} C ${mid} ${fromY}, ${mid} ${toY}, ${toX} ${toY}`} className="mindmap-edge" />;
-          })}
-          {mindMap.nodes.map((node) => {
-            const position = positions.get(node.id);
-            if (!position) return null;
-            const active = node.id === selectedId;
-            return <g key={node.id} transform={`translate(${position.x} ${position.y})`} role="button" tabIndex={0} className={active ? 'mindmap-node selected' : 'mindmap-node'} onClick={() => setSelectedId(node.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(node.id); } }}>
-              <rect width={NODE_WIDTH} height={NODE_HEIGHT} rx="9" />
-              <text className="mindmap-label" x="12" y="25">{node.label.length > 18 ? `${node.label.slice(0, 17)}…` : node.label}</text>
-              <text className="mindmap-zh" x="12" y="44">{node.zh.length > 24 ? `${node.zh.slice(0, 23)}…` : node.zh}</text>
-              <text className="mindmap-level" x="12" y="62">{position.level === 0 ? '核心' : `分支 ${position.level}`}</text>
-              <MessageCircleQuestion x={NODE_WIDTH - 27} y="10" width="15" height="15" />
-            </g>;
-          })}
+          <g transform={`translate(${(WIDTH * (1 - zoom)) / 2} ${(HEIGHT * (1 - zoom)) / 2}) scale(${zoom})`}>
+            {mindMap.nodes.map((node) => {
+              if (!node.parentId) return null;
+              const parent = positions.get(node.parentId); const child = positions.get(node.id);
+              if (!parent || !child) return null;
+              const fromX = parent.x + NODE_WIDTH; const fromY = parent.y + NODE_HEIGHT / 2;
+              const toX = child.x; const toY = child.y + NODE_HEIGHT / 2;
+              const bend = Math.max(44, (toX - fromX) * 0.48);
+              const active = selected?.id === node.id || selected?.id === node.parentId;
+              return <path key={`${node.parentId}-${node.id}`} className={active ? 'mindmap-edge active' : 'mindmap-edge'} d={`M ${fromX} ${fromY} C ${fromX + bend} ${fromY}, ${toX - bend} ${toY}, ${toX} ${toY}`} />;
+            })}
+            {mindMap.nodes.map((node) => {
+              const pos = positions.get(node.id);
+              if (!pos) return null;
+              const isSelected = node.id === selected?.id;
+              return <g key={node.id} transform={`translate(${pos.x} ${pos.y})`} className={isSelected ? 'mindmap-node selected' : 'mindmap-node'} role="button" tabIndex={0} onClick={() => setSelectedId(node.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedId(node.id); } }}>
+                <rect width={NODE_WIDTH} height={NODE_HEIGHT} rx="12" />
+                <path d={`M 2 12 L 2 ${NODE_HEIGHT - 12}`} className={`mindmap-accent level-${pos.level}`} />
+                <text className="mindmap-level" x="15" y="21">{pos.level === 0 ? '核心锚点' : pos.level === 1 ? '一级维度' : '细分要点'}</text>
+                <text className="mindmap-label" x="15" y="42">{node.label.slice(0, 14)}</text>
+                <text className="mindmap-zh" x="15" y="63">{node.zh.length > 18 ? `${node.zh.slice(0, 17)}…` : node.zh}</text>
+              </g>;
+            })}
+          </g>
         </svg>
       </div>
-      {selected && <div className="mindmap-question"><div><span>已选节点</span><strong>{selected.label}</strong><p>{selected.zh}</p><small>建议追问：{selected.question}</small></div><button className="primary-action" onClick={() => onAsk(paper, selected)}>追问这个节点<ArrowRight size={15} /></button></div>}
+      {selected && <footer className="mindmap-question">
+        <div>
+          <span>当前选中节点 · {selected.label}</span>
+          <p>{selected.zh}</p>
+          <strong><MessageCircleQuestion size={15} />建议追问：{selected.question}</strong>
+        </div>
+        <button className="primary-action" onClick={() => onAsk(paper, selected)}>送入 DSH 追问该节点<ArrowRight size={15} /></button>
+      </footer>}
     </section>
   </div>;
 }

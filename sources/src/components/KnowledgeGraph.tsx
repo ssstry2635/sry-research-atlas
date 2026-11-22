@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, Focus, Layers3, Minus, Plus, RotateCcw } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Focus, Layers3, Minus, Plus, RotateCcw, Sparkles } from 'lucide-react';
 import type { ChatCard, GraphData, NodeKind, Paper, ResearchNode } from '../types';
 import { computeGraphLayout, GRAPH_CENTER_X, GRAPH_HEIGHT, GRAPH_WIDTH, PAPERS_PER_PAGE, shortGraphText, wrapGraphText, type GraphPosition } from '../lib/graph-layout';
 
@@ -61,12 +61,14 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
     });
     return ids;
   }, [graph.edges, focusedBranch]);
+
   const scopedPapers = useMemo(() => {
-    const papers = graph.nodes.filter((node) => node.kind === 'paper' && visibleKinds.has('paper'));
-    if (!focusedBranch) return papers;
+    const allPaperNodes = graph.nodes.filter((node) => node.kind === 'paper' && visibleKinds.has('paper'));
+    if (!focusedBranch) return allPaperNodes;
     const ids = new Set(focusedBranch.paperIds);
-    return papers.filter((node) => ids.has(node.id) || ids.has(node.paperIds[0]));
+    return allPaperNodes.filter((node) => ids.has(node.id) || ids.has(node.paperIds[0]));
   }, [graph.nodes, focusedBranch, visibleKinds]);
+
   const pageCount = Math.max(1, Math.ceil(scopedPapers.length / PAPERS_PER_PAGE));
   const visiblePapers = scopedPapers.slice(paperPage * PAPERS_PER_PAGE, paperPage * PAPERS_PER_PAGE + PAPERS_PER_PAGE);
   const visibleNonPapers = graph.nodes.filter((node) => node.kind !== 'paper' && visibleKinds.has(node.kind) && (!branchIds || branchIds.has(node.id)));
@@ -118,21 +120,21 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
         const parent = next[parentId];
         if (!parent) return;
         children.sort((a, b) => a.kind.localeCompare(b.kind) || a.title.localeCompare(b.title));
-        const spacing = 100;
+        const spacing = 104;
         const baseY = parent.y - ((children.length - 1) * spacing) / 2;
         const direction = parent.side === 'left' ? -1 : 1;
         children.forEach((node, index) => {
           const anchor = anchors.get(node.id)!;
           let candidate: GraphPosition = {
             ...anchor,
-            x: Math.max(anchor.width / 2 + 16, Math.min(GRAPH_WIDTH - anchor.width / 2 - 16, parent.x + direction * 300)),
+            x: Math.max(anchor.width / 2 + 16, Math.min(GRAPH_WIDTH - anchor.width / 2 - 16, parent.x + direction * 290)),
             y: Math.max(anchor.height / 2 + 16, Math.min(GRAPH_HEIGHT - anchor.height / 2 - 16, baseY + index * spacing)),
           };
           let attempts = 0;
           while (Object.entries(next).some(([id, position]) => id !== node.id && overlaps(candidate, position)) && attempts < 24) {
             candidate = { ...candidate, y: candidate.y + spacing };
             if (candidate.y > GRAPH_HEIGHT - candidate.height / 2 - 16) {
-              candidate = { ...candidate, x: candidate.x + 280, y: anchor.height / 2 + 40 };
+              candidate = { ...candidate, x: candidate.x + 260, y: anchor.height / 2 + 40 };
             }
             attempts += 1;
           }
@@ -234,9 +236,15 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
     const canvas = canvasRef.current?.getBoundingClientRect();
     const rect = target.getBoundingClientRect();
     if (!canvas) return;
-    const left = Math.max(12, Math.min(canvas.width - 352, rect.left - canvas.left + rect.width / 2 - 165));
-    const top = Math.max(12, Math.min(canvas.height - 260, rect.top - canvas.top + rect.height + 10));
-    setPaperHover({ node, paper: papers[node.paperIds[0]], left, top, flip: rect.left - canvas.left > canvas.width - 390 });
+    const cardWidth = 368;
+    const cardHeight = 315;
+    const rawLeft = rect.left - canvas.left + rect.width / 2 - cardWidth / 2;
+    const left = Math.max(14, Math.min(canvas.width - cardWidth - 14, rawLeft));
+    const spaceBelow = canvas.height - (rect.bottom - canvas.top);
+    const top = spaceBelow < cardHeight + 24
+      ? Math.max(58, rect.top - canvas.top - cardHeight - 10)
+      : Math.min(canvas.height - cardHeight - 52, rect.bottom - canvas.top + 10);
+    setPaperHover({ node, paper: papers[node.paperIds[0]], left, top, flip: spaceBelow < cardHeight + 24 });
   };
   const toggleBranchFocus = () => {
     if (focusedBranchId) { setFocusedBranchId(null); return; }
@@ -265,69 +273,166 @@ export function KnowledgeGraph({ graph, papers, selectedId, onSelect, loading, s
   };
 
   return <section className="graph-workspace" aria-label="材料知识网络">
-    <div className="workspace-heading">
-      <div><span className="section-kicker">材料谱系靠左 · 方法与证据靠右 · 拖动节点安排阅读顺序</span><h1>{searchLabel ? `“${searchLabel}”的发散网络` : '材料知识网络'}</h1><p>分支分别向左右两侧竖直展开，不跨中心交叉；节点可以自由拖动，位置会保留。布局过密时点击“自动整理”。</p></div>
-      <div className="workspace-actions">
-        {searchLabel && <button className="text-button" onClick={onReset}><RotateCcw size={15} />返回示例</button>}
-        <button className={focusedBranchId ? 'tool-button active' : 'tool-button'} onClick={toggleBranchFocus}><BookOpen size={15} />{focusedBranchId ? '显示全图' : '当前分支'}</button>
-        <div className="filter-wrap"><button className={filtersOpen ? 'tool-button active' : 'tool-button'} onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}><Layers3 size={16} />筛选<span>{visibleKinds.size}</span></button>
-          {filtersOpen && <div className="filter-popover"><strong>显示节点类型</strong>{allKinds.map((kind) => <label key={kind}><input type="checkbox" checked={visibleKinds.has(kind)} onChange={() => toggleKind(kind)} /><span className={`legend-mark ${kind}`} />{kindLabels[kind]}</label>)}<label className="edge-label-toggle"><input type="checkbox" checked={showLabels} onChange={() => setShowLabels(!showLabels)} />显示当前关系文字</label></div>}
+    <div ref={canvasRef} className={loading ? 'graph-canvas is-loading' : 'graph-canvas'}>
+      <div className="canvas-hud-top">
+        <div className="canvas-title-pill">
+          <span className="hud-badge"><Sparkles size={13} />{searchLabel ? '实时发散图谱' : '核心知识图谱'}</span>
+          <h1>{searchLabel ? `“${searchLabel}”的发散网络` : '材料知识网络'}</h1>
+          {selected && <span className="canvas-focus-chip"><i className={`legend-mark ${selected.kind}`} />焦点：<strong>{selected.title}</strong></span>}
+        </div>
+        <div className="workspace-actions">
+          {searchLabel && <button className="tool-button subtle" onClick={onReset}><RotateCcw size={14} />返回示例</button>}
+          <button className="tool-button" onClick={arrangeNodes}><Focus size={14} />自动整理</button>
+          <button className={focusedBranchId ? 'tool-button active' : 'tool-button'} onClick={toggleBranchFocus}><BookOpen size={14} />{focusedBranchId ? '显示全图' : '当前分支'}</button>
+          <div className="filter-wrap">
+            <button className={filtersOpen ? 'tool-button active' : 'tool-button'} onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}><Layers3 size={14} />筛选<span>{visibleKinds.size}</span></button>
+            {filtersOpen && <div className="filter-popover">
+              <strong>显示节点类型</strong>
+              {allKinds.map((kind) => <label key={kind}><input type="checkbox" checked={visibleKinds.has(kind)} onChange={() => toggleKind(kind)} /><span className={`legend-mark ${kind}`} />{kindLabels[kind]}</label>)}
+              <label className="edge-label-toggle"><input type="checkbox" checked={showLabels} onChange={() => setShowLabels(!showLabels)} />显示关系标签</label>
+            </div>}
+          </div>
+          <div className="zoom-controls" aria-label="图谱缩放控制">
+            <button onClick={() => setZoom((z) => Math.max(.55, z - .12))} aria-label="缩小" title="缩小"><Minus size={14} /></button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom((z) => Math.min(1.8, z + .12))} aria-label="放大" title="放大"><Plus size={14} /></button>
+          </div>
         </div>
       </div>
-    </div>
-    <div ref={canvasRef} className={loading ? 'graph-canvas is-loading' : 'graph-canvas'}>
-      <svg ref={svgRef} viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} role="group" aria-label="从左向右的知识网络，可拖动节点和画布，Tab 选择节点，回车查看详情" onPointerDown={startPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => { dragRef.current = null; }} onWheel={(event) => { event.preventDefault(); setZoom((current) => Math.max(.55, Math.min(1.8, current - event.deltaY * .001))); }}>
-        <defs><pattern id="dot-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".8" className="grid-dot" /></pattern></defs>
+
+      <svg ref={svgRef} viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} role="group" aria-label="左右双侧科研知识图谱，可拖动节点和画布，Tab 选择节点，回车查看详情" onPointerDown={startPan} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={() => { dragRef.current = null; }} onWheel={(event) => { event.preventDefault(); setZoom((current) => Math.max(.55, Math.min(1.8, current - event.deltaY * .001))); }}>
+        <defs>
+          <pattern id="dot-grid" width="26" height="26" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1.05" className="grid-dot" />
+          </pattern>
+          <radialGradient id="canvas-aura" cx="50%" cy="50%" r="52%">
+            <stop offset="0%" stopColor="var(--bd-brand)" stopOpacity="0.11" />
+            <stop offset="55%" stopColor="var(--bd-brand)" stopOpacity="0.03" />
+            <stop offset="100%" stopColor="var(--bd-brand)" stopOpacity="0" />
+          </radialGradient>
+          <filter id="card-shadow" x="-18%" y="-18%" width="136%" height="142%">
+            <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#040d14" floodOpacity="0.14" />
+          </filter>
+          <filter id="root-glow" x="-25%" y="-25%" width="150%" height="150%">
+            <feDropShadow dx="0" dy="10" stdDeviation="14" floodColor="#05131c" floodOpacity="0.28" />
+          </filter>
+        </defs>
         <rect width={GRAPH_WIDTH} height={GRAPH_HEIGHT} fill="url(#dot-grid)" className="graph-background" />
+        <ellipse cx={GRAPH_CENTER_X} cy={GRAPH_HEIGHT / 2} rx="460" ry="330" fill="url(#canvas-aura)" pointerEvents="none" />
+
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
-          <g className="side-guide"><line x1={GRAPH_CENTER_X} y1="60" x2={GRAPH_CENTER_X} y2={GRAPH_HEIGHT - 55} /><text x="220" y="32">左侧 · 材料谱系</text><text x={GRAPH_CENTER_X} y="32">研究起点</text><text x="880" y="32">右侧 · 方法与证据</text></g>
+          <g className="side-guide">
+            <line x1={GRAPH_CENTER_X} y1="104" x2={GRAPH_CENTER_X} y2={GRAPH_HEIGHT - 74} />
+            <g transform="translate(282 82)">
+              <rect x="-92" y="-13" width="184" height="23" rx="11.5" className="lane-pill left" />
+              <text x="0" y="2">左侧 · 体系与同构谱系</text>
+            </g>
+            <g transform={`translate(${GRAPH_CENTER_X} 82)`}>
+              <rect x="-58" y="-13" width="116" height="23" rx="11.5" className="lane-pill center" />
+              <text x="0" y="2">核心研究锚点</text>
+            </g>
+            <g transform="translate(1098 82)">
+              <rect x="-102" y="-13" width="204" height="23" rx="11.5" className="lane-pill right" />
+              <text x="0" y="2">右侧 · 方法路线与论文证据</text>
+            </g>
+          </g>
+
           {graph.edges.map((edge) => {
             if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) return null;
             const source = positionFor(edge.source); const target = positionFor(edge.target);
             if (!source || !target) return null;
             if (source.side !== target.side && source.side !== 'center' && target.side !== 'center') return null;
-            const dx = target.x - source.x; const direction = dx >= 0 ? 1 : -1; const bend = Math.max(42, Math.min(120, Math.abs(dx) * .32));
-            const cx = (source.x + target.x) / 2; const cy = (source.y + target.y) / 2;
+            const dx = target.x - source.x; const direction = dx >= 0 ? 1 : -1;
+            const startX = source.x + direction * (source.width / 2 - 2);
+            const endX = target.x - direction * (target.width / 2 - 2);
+            const span = Math.abs(endX - startX);
+            const bend = Math.max(18, Math.min(82, span * .48));
+            const c1x = startX + direction * bend;
+            const c2x = endX - direction * bend;
+            const lx = (startX + endX) / 2;
+            const ly = (source.y + target.y) / 2;
             const active = selectedId === edge.source || selectedId === edge.target;
-            return <g key={edge.id} className={active ? 'graph-edge active' : 'graph-edge'}><path d={`M ${source.x} ${source.y} C ${source.x + direction * bend} ${source.y}, ${target.x - direction * bend} ${target.y}, ${target.x} ${target.y}`} />{showLabels && active && edge.label && <text x={cx} y={cy - 7}>{edge.label}</text>}</g>;
+            return <g key={edge.id} className={active ? 'graph-edge active' : 'graph-edge'}>
+              <path d={`M ${startX} ${source.y} C ${c1x} ${source.y}, ${c2x} ${target.y}, ${endX} ${target.y}`} />
+              <circle cx={startX} cy={source.y} r={active ? 3.2 : 2.2} className="edge-terminal" />
+              <circle cx={endX} cy={target.y} r={active ? 3.5 : 2.4} className="edge-terminal target" />
+              {showLabels && active && edge.label && <g transform={`translate(${lx} ${ly})`}>
+                <rect x="-32" y="-9.5" width="64" height="17" rx="8.5" className="edge-label-bg" />
+                <text x="0" y="2.5">{edge.label}</text>
+              </g>}
+            </g>;
           })}
+
           {visibleNodes.map((node) => {
             const position = positionFor(node.id);
             if (!position) return null;
             const isSelected = node.id === selectedId;
             const dimmed = selectedId !== 'root' && !neighbors.has(node.id);
             const x = -position.width / 2; const y = -position.height / 2;
+            const paper = node.kind === 'paper' ? papers[node.paperIds[0]] : undefined;
             return <g key={node.id} transform={`translate(${position.x} ${position.y})`} className={`graph-node node-${node.kind} ${node.id === 'root' ? 'node-root' : ''} ${isSelected ? 'selected' : ''} ${dimmed ? 'dimmed' : ''}`} role="button" tabIndex={0} aria-label={`${kindLabels[node.kind]}：${node.title}，${node.subtitle}。拖动可调整位置，也可拖入下方 DSH 对话；回车查看详情`} onPointerDown={(event) => startNodeDrag(event, node)} onMouseEnter={(event) => showPaperHover(event, node)} onMouseLeave={() => setPaperHover(null)} onFocus={(event) => showPaperHover(event, node)} onBlur={() => setPaperHover(null)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectNode(node); } }}>
-              <rect x={x} y={y} width={position.width} height={position.height} rx={node.id === 'root' ? 17 : 11} className="node-card" /><path d={`M ${x} ${y + 13} L ${x} ${y + position.height - 13}`} className="node-accent" />
+              {isSelected && <rect x={x - 5} y={y - 5} width={position.width + 10} height={position.height + 10} rx={node.id === 'root' ? 23 : 16} className="selected-halo" />}
+              <rect x={x} y={y} width={position.width} height={position.height} rx={node.id === 'root' ? 18 : 13} className="node-card" filter={node.id === 'root' ? 'url(#root-glow)' : 'url(#card-shadow)'} />
+              <path d={`M ${x + 2} ${y + 13} L ${x + 2} ${y + position.height - 13}`} className="node-accent" />
               {node.id === 'root' ? <>
-                <text className="root-kicker" textAnchor="middle" y="-42">研究起点</text><text className="root-title" textAnchor="middle" y="-7">{shortGraphText(node.title, 19)}</text><text className="root-subtitle" textAnchor="middle" y="19">{shortGraphText(node.subtitle, 30)}</text><text className="root-meta" textAnchor="middle" y="43">{node.paperIds.length} 篇直接证据 · 点击查看详情</text>
+                <rect x="-56" y="-50" width="112" height="20" rx="10" className="root-pill" />
+                <text className="root-kicker" textAnchor="middle" y="-36">研究起点 · 核心锚点</text>
+                <text className="root-title" textAnchor="middle" y="-4">{shortGraphText(node.title, 18)}</text>
+                <text className="root-subtitle" textAnchor="middle" y="20">{shortGraphText(node.subtitle, 28)}</text>
+                <rect x="-78" y="31" width="156" height="20" rx="10" className="root-meta-pill" />
+                <text className="root-meta" textAnchor="middle" y="45">{node.paperIds.length} 篇直接证据 · 点击探索</text>
               </> : node.kind === 'paper' ? <>
-                <circle cx={x + 22} cy="0" r="13" className="glyph-disc" /><text className="node-glyph" x={x + 22} y="4" textAnchor="middle">¶</text>
-                {wrapGraphText(node.description, 29, 2).map((line, index) => <text key={index} className="paper-node-title" x={x + 43} y={-14 + index * 13}>{line}</text>)}
-                <text className="paper-node-meta" x={x + 43} y="25">{shortGraphText(`${node.subtitle} · ${node.title}`, 36)}</text>
+                <circle cx={x + 23} cy="-4" r="14" className="glyph-disc" />
+                <text className="node-glyph" x={x + 23} y="1" textAnchor="middle">¶</text>
+                <text className="paper-badge-text" x={x + 44} y="-22">{shortGraphText(`${paper?.source || '文献'}${paper?.year ? ` · ${paper.year}` : ''}${paper?.pdfUrl ? ' · OA PDF' : paper?.openAccess ? ' · OA' : ''}`, 28)}</text>
+                {wrapGraphText(node.description, 27, 2).map((line, index) => <text key={index} className="paper-node-title" x={x + 44} y={-5 + index * 14}>{line}</text>)}
+                <text className="paper-node-meta" x={x + 44} y="27">{shortGraphText(`${node.title} · ${paper?.venue || node.subtitle}`, 31)}</text>
               </> : <>
-                <circle cx={x + 22} cy="0" r="13" className="glyph-disc" /><text className="node-glyph" x={x + 22} y="4" textAnchor="middle">{kindGlyphs[node.kind]}</text>
-                <text className="node-kind" x={x + 43} y="-21">{kindLabels[node.kind]}</text><text className="node-title" x={x + 43} y="-3">{shortGraphText(node.title, node.kind === 'method' ? 14 : 17)}</text><text className="node-subtitle" x={x + 43} y="14">{shortGraphText(node.relation || node.subtitle, 24)}</text><text className="node-tag" x={x + 43} y="29">{shortGraphText(node.evidenceLevel || node.tags[0] || node.subtitle, 25)}</text>
+                <circle cx={x + 23} cy="0" r="14" className="glyph-disc" />
+                <text className="node-glyph" x={x + 23} y="4" textAnchor="middle">{kindGlyphs[node.kind]}</text>
+                <text className="node-kind" x={x + 44} y="-19">{shortGraphText(`${kindLabels[node.kind]}${node.evidenceLevel ? ` · ${node.evidenceLevel}` : ''}`, 22)}</text>
+                <text className="node-title" x={x + 44} y="-1">{shortGraphText(node.title, 18)}</text>
+                <text className="node-subtitle" x={x + 44} y="16">{shortGraphText(node.relation || node.subtitle, 22)}</text>
+                <text className="node-tag" x={x + 44} y="30">{shortGraphText(`${node.paperIds.length} 篇证据 · ${node.tags[0] || node.subtitle}`, 23)}</text>
               </>}
             </g>;
           })}
-          {!visiblePapers.length && visibleKinds.has('paper') && <text x="530" y="64" className="empty-orbit">当前节点还没有展开的论文证据</text>}
+          {!visiblePapers.length && visibleKinds.has('paper') && <text x={GRAPH_CENTER_X} y="82" className="empty-orbit">当前节点还没有展开的论文证据</text>}
         </g>
       </svg>
-      <div className="zoom-controls" aria-label="图谱缩放控制"><button onClick={() => setZoom((z) => Math.min(1.8, z + .12))} aria-label="放大"><Plus size={17} /></button><span>{Math.round(zoom * 100)}%</span><button onClick={() => setZoom((z) => Math.max(.55, z - .12))} aria-label="缩小"><Minus size={17} /></button><button onClick={arrangeNodes} aria-label="自动整理节点"><Focus size={17} /></button></div>
-      {selected && <div className="canvas-selection"><span className={`legend-mark ${selected.kind}`} />当前焦点<strong>{selected.title}</strong></div>}
-      <div className="graph-legend" aria-label="节点图例">{allKinds.map((kind) => <span key={kind}><i className={`legend-mark ${kind}`} />{kindLabels[kind]}</span>)}</div>
-      {scopedPapers.length > PAPERS_PER_PAGE && <div className="paper-pager"><button disabled={paperPage === 0} onClick={() => setPaperPage((page) => Math.max(0, page - 1))} aria-label="上一页论文"><ChevronLeft size={14} /></button><span>{paperPage + 1} / {pageCount}</span><button disabled={paperPage >= pageCount - 1} onClick={() => setPaperPage((page) => Math.min(pageCount - 1, page + 1))} aria-label="下一页论文"><ChevronRight size={14} /></button></div>}
+
+      <div className="canvas-hud-bottom">
+        <div className="graph-legend" aria-label="节点图例">
+          {allKinds.map((kind) => <span key={kind}><i className={`legend-mark ${kind}`} />{kindLabels[kind]}</span>)}
+        </div>
+        <div className="canvas-hud-right">
+          <span className="canvas-tip">拖拽节点排版 · 向下拖入对话 · 滚轮缩放</span>
+          {scopedPapers.length > PAPERS_PER_PAGE && <div className="paper-pager">
+            <button disabled={paperPage === 0} onClick={() => setPaperPage((page) => Math.max(0, page - 1))} aria-label="上一页论文"><ChevronLeft size={14} /></button>
+            <span>论文 {paperPage + 1} / {pageCount}</span>
+            <button disabled={paperPage >= pageCount - 1} onClick={() => setPaperPage((page) => Math.min(pageCount - 1, page + 1))} aria-label="下一页论文"><ChevronRight size={14} /></button>
+          </div>}
+        </div>
+      </div>
+
       {paperHover && <div className={paperHover.flip ? 'paper-hover flip' : 'paper-hover'} style={{ left: paperHover.left, top: paperHover.top }} role="tooltip">
-        <div className="paper-hover-type"><span>{paperHover.paper?.source || '论文证据'}{paperHover.paper?.pdfUrl ? ' · 开放 PDF' : paperHover.paper?.openAccess ? ' · OA' : ''}</span><em>{paperHover.paper?.year || '年份未知'} · {paperHover.paper?.venue || '期刊未知'}</em></div>
+        <div className="paper-hover-type">
+          <span>{paperHover.paper?.source || '论文证据'}{paperHover.paper?.pdfUrl ? ' · 开放 PDF' : paperHover.paper?.openAccess ? ' · OA' : ''}</span>
+          <em>{paperHover.paper?.year || '年份未知'} · 被引 {(paperHover.paper?.citations || 0).toLocaleString()}</em>
+        </div>
         <h3>{paperHover.paper?.title || paperHover.node.description}</h3>
-        <p className="paper-hover-authors">{paperHover.paper?.authors || paperHover.node.title}</p>
-        <section><span>英文概括</span><p>{paperHover.paper?.summaryEn || paperHover.paper?.abstract?.slice(0, 320) || '暂无英文摘要；请打开原文核对。'}</p></section>
-        <section className="zh"><span>中文对照</span><p>{paperHover.paper?.summaryZh || (paperHover.paper?.summaryStatus === 'pending' ? '中文概括正在生成…' : paperHover.paper?.summaryStatus === 'error' ? '中文概括生成失败，请打开详情或原文。' : '暂无中文概括。')}</p></section>
-        {paperHover.paper?.keyFinding && <footer>关键发现：{paperHover.paper.keyFinding}</footer>}
-        <small>点击查看详情 · 拖动卡片可加入下方 DSH 对话</small>
+        <p className="paper-hover-authors">{paperHover.paper?.authors || paperHover.node.title} · {paperHover.paper?.venue || '期刊未知'}</p>
+        <section>
+          <span>English Summary · 英文核心概括</span>
+          <p>{paperHover.paper?.summaryEn || paperHover.paper?.abstract?.slice(0, 320) || '暂无英文摘要；请打开原文核对。'}</p>
+        </section>
+        <section className="zh">
+          <span>中文学术对照</span>
+          <p>{paperHover.paper?.summaryZh || (paperHover.paper?.summaryStatus === 'pending' ? '正在调用模型生成中文概括…' : paperHover.paper?.summaryStatus === 'error' ? '中文概括生成失败，请打开详情或原文。' : '暂无中文概括。')}</p>
+        </section>
+        {paperHover.paper?.keyFinding && <footer><strong>关键发现：</strong>{paperHover.paper.keyFinding}</footer>}
+        <small>点击查看完整证据与思维导图 · 向下拖动卡片可送入 DSH 原生对话</small>
       </div>}
     </div>
-    <div className="graph-caption"><span>拖动节点自由排版 · 拖拽空白处移动画布 · 滚轮缩放</span><span>左右两侧独立展开，距离表示探索层级，不代表相似度</span></div>
   </section>;
 }

@@ -1,11 +1,11 @@
 import type { NodeKind, ResearchEdge, ResearchNode } from '../types';
 
-export const GRAPH_WIDTH = 1100;
-export const GRAPH_HEIGHT = 900;
+export const GRAPH_WIDTH = 1380;
+export const GRAPH_HEIGHT = 940;
 export const PAPERS_PER_PAGE = 5;
-export const GRAPH_CENTER_X = 550;
-export const LEFT_BRANCH_X = 120;
-export const RIGHT_BRANCH_X = 980;
+export const GRAPH_CENTER_X = 690;
+export const LEFT_BRANCH_X = 155;
+export const RIGHT_BRANCH_X = 1225;
 
 export type GraphSide = 'left' | 'center' | 'right';
 
@@ -19,12 +19,12 @@ export interface GraphPosition {
 }
 
 const dimensions: Record<NodeKind | 'root', { width: number; height: number }> = {
-  root: { width: 218, height: 126 },
-  material: { width: 176, height: 70 },
-  family: { width: 182, height: 70 },
-  method: { width: 180, height: 72 },
-  paper: { width: 230, height: 70 },
-  opportunity: { width: 188, height: 74 },
+  root: { width: 236, height: 132 },
+  material: { width: 196, height: 78 },
+  family: { width: 198, height: 78 },
+  method: { width: 198, height: 80 },
+  paper: { width: 248, height: 80 },
+  opportunity: { width: 204, height: 80 },
 };
 
 const kindOrder: Record<NodeKind, number> = { family: 0, material: 1, method: 2, opportunity: 3, paper: 4 };
@@ -103,8 +103,8 @@ export function computeGraphLayout(nodes: ResearchNode[], edges: ResearchEdge[] 
 
   const columnOf = (node: ResearchNode, nodeDepth: number): number => {
     const nodeSide = side.get(node.id) || 'right';
-    if (nodeSide === 'left') return nodeDepth <= 1 && node.kind !== 'paper' ? 330 : LEFT_BRANCH_X;
-    return nodeDepth <= 1 && node.kind !== 'paper' ? 770 : RIGHT_BRANCH_X;
+    if (nodeSide === 'left') return nodeDepth <= 1 && node.kind !== 'paper' ? 410 : LEFT_BRANCH_X;
+    return nodeDepth <= 1 && node.kind !== 'paper' ? 970 : RIGHT_BRANCH_X;
   };
   const lanes = new Map<string, ResearchNode[]>();
   nodes.forEach((node) => {
@@ -122,48 +122,81 @@ export function computeGraphLayout(nodes: ResearchNode[], edges: ResearchEdge[] 
       const rootB = branchOrder.get(branchRoot.get(b.id) || b.id) ?? 999;
       return rootA - rootB || kindOrder[a.kind] - kindOrder[b.kind] || a.title.localeCompare(b.title);
     });
-    const top = 70; const bottom = GRAPH_HEIGHT - 70;
+    const top = 148; const bottom = GRAPH_HEIGHT - 120;
     const step = sorted.length > 1 ? (bottom - top) / (sorted.length - 1) : 0;
     sorted.forEach((node, index) => {
-      const y = sorted.length > 1 ? top + step * index : GRAPH_HEIGHT / 2;
+      const y = sorted.length > 1 ? top + step * index : GRAPH_HEIGHT / 2 + 12;
       const nodeDepth = depth.get(node.id) || 1;
       positions.set(node.id, { x, y, ...dimensions[node.kind], depth: nodeDepth, side: side.get(node.id) || 'right' });
     });
   });
-  positions.set(root.id, { x: GRAPH_CENTER_X, y: GRAPH_HEIGHT / 2, ...dimensions.root, depth: 0, side: 'center' });
+  positions.set(root.id, { x: GRAPH_CENTER_X, y: GRAPH_HEIGHT / 2 + 12, ...dimensions.root, depth: 0, side: 'center' });
   return positions;
 }
 
-export function wrapGraphText(text: string, maxCharacters: number, maxLines = 2): string[] {
-  const words = text.trim().split(/\s+/).filter(Boolean);
+function charVisualUnits(ch: string): number {
+  const code = ch.charCodeAt(0);
+  if (code >= 0x2e80 && code <= 0x9fff) return 1.85;
+  if (code >= 0xff00 && code <= 0xffef) return 1.85;
+  return 1;
+}
+
+function visualWidth(str: string): number {
+  let total = 0;
+  for (const ch of str) total += charVisualUnits(ch);
+  return total;
+}
+
+function sliceByVisualWidth(str: string, maxUnits: number): string {
+  let total = 0;
+  let out = '';
+  for (const ch of str) {
+    const w = charVisualUnits(ch);
+    if (total + w > maxUnits) break;
+    total += w;
+    out += ch;
+  }
+  return out;
+}
+
+export function wrapGraphText(text: string, maxUnits: number, maxLines = 2): string[] {
+  const clean = text.trim().replace(/\s+/g, ' ');
+  if (!clean) return [''];
+  const tokens = clean.match(/[\u2e80-\u9fff\uff00-\uffef]|[A-Za-z0-9_sub⁻⁺₀-₉⁰-⁹·.-]+|\S/g) || [clean];
   const lines: string[] = [];
-  let line = '';
-  const pushWord = (word: string) => {
-    if (!word) return;
-    if ((line + ' ' + word).trim().length <= maxCharacters) {
-      line = (line + ' ' + word).trim();
-      return;
+  let current = '';
+  for (const token of tokens) {
+    const needSpace = current.length > 0 && /^[A-Za-z0-9]/.test(token) && /[A-Za-z0-9]$/.test(current);
+    const candidate = needSpace ? `${current} ${token}` : `${current}${token}`;
+    if (visualWidth(candidate) <= maxUnits) {
+      current = candidate;
+      continue;
     }
-    if (line) lines.push(line);
-    line = word;
-  };
-  words.forEach((word) => {
-    if (word.length <= maxCharacters) { pushWord(word); return; }
-    let rest = word;
-    while (rest.length > maxCharacters) {
-      if (line) { lines.push(line); line = ''; }
-      lines.push(rest.slice(0, maxCharacters));
-      rest = rest.slice(maxCharacters);
+    if (current) {
+      lines.push(current);
+      current = '';
     }
-    pushWord(rest);
-  });
-  if (line) lines.push(line);
+    if (visualWidth(token) <= maxUnits) {
+      current = token;
+    } else {
+      let rest = token;
+      while (visualWidth(rest) > maxUnits) {
+        const piece = sliceByVisualWidth(rest, maxUnits);
+        if (!piece) break;
+        lines.push(piece);
+        rest = rest.slice(piece.length);
+      }
+      current = rest;
+    }
+  }
+  if (current) lines.push(current);
   if (lines.length <= maxLines) return lines;
   const clipped = lines.slice(0, maxLines);
-  clipped[maxLines - 1] = `${clipped[maxLines - 1].slice(0, Math.max(1, maxCharacters - 1))}…`;
+  clipped[maxLines - 1] = `${sliceByVisualWidth(clipped[maxLines - 1], Math.max(2, maxUnits - 1.5))}…`;
   return clipped;
 }
 
-export function shortGraphText(text: string, maxCharacters: number) {
-  return text.length > maxCharacters ? `${text.slice(0, Math.max(1, maxCharacters - 1))}…` : text;
+export function shortGraphText(text: string, maxUnits: number) {
+  const clean = String(text || '').trim();
+  return visualWidth(clean) > maxUnits ? `${sliceByVisualWidth(clean, Math.max(2, maxUnits - 1.5))}…` : clean;
 }

@@ -290,20 +290,31 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
   const doExport = useCallback(() => exportBrief(project, recommendations, papers), [project, recommendations, papers]);
   const allPapers = Object.values(papers);
   const savedPapers = savedIds.map((id) => papers[id]).filter(Boolean);
+  const oaCount = allPapers.filter((p) => p.openAccess || p.pdfUrl).length;
 
   return <div className={embedded ? 'bohr-dsh embedded' : 'bohr-dsh'}>
     <header className="bd-header">
-      <div className="bd-brand"><AtlasMark /><div><strong>玻尔科学空间</strong><span>发散式研究工作台</span></div></div>
+      <div className="bd-brand"><div className="bd-logo-orb"><AtlasMark /></div><div><strong>玻尔科学空间</strong><span>Bohr Research Atlas · 4.8</span></div></div>
+      <nav className="bd-navigation" aria-label="科研工作台视图">{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)} aria-current={view === id ? 'page' : undefined}><Icon size={15} /><span>{label}</span>{id === 'papers' && <em>{allPapers.length}</em>}{id === 'directions' && <em>{recommendations.length}</em>}{id === 'library' && savedPapers.length > 0 && <em>{savedPapers.length}</em>}</button>)}</nav>
       <form className="bd-search" role="search" onSubmit={(event) => { event.preventDefault(); if (searchInput.trim()) handleSearch(searchInput.trim()); }}>
-        {loading ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />}
-        <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索任意学科主题、材料化学式、方法或 DOI（支持中英文）" aria-label="搜索任意学科主题、材料化学式、方法或 DOI" />
-        <button type="submit" disabled={loading || !searchInput.trim()}>{loading ? '检索中' : '搜索'}</button>
+        {loading ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />}
+        <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="搜索学科主题、化学式、方法或 DOI（支持中英文）" aria-label="搜索任意学科主题、材料化学式、方法或 DOI" />
+        {searchInput && <button type="button" className="bd-search-clear" onClick={() => setSearchInput('')} aria-label="清空搜索词"><X size={13} /></button>}
+        <button type="submit" disabled={loading || !searchInput.trim()}>{loading ? '检索中' : '发散检索'}</button>
       </form>
-      <div className="bd-header-actions"><button className="bd-source" onClick={() => setInfoOpen(true)} title="多源检索架构与证据边界"><i className={live ? 'live' : ''} /><span>OpenAlex · Crossref · arXiv · PMC</span><Info size={14} /></button><button className="icon-button" onClick={doExport} aria-label="导出研究简报" title="导出研究简报"><Download size={17} /></button></div>
+      <div className="bd-header-actions">
+        <button className="bd-project" onClick={() => setProjectOpen(true)} title="编辑当前研究课题与实验约束"><FlaskConical size={15} /><span><small>当前课题</small><strong>{project.target}</strong></span></button>
+        <button className="bd-source" onClick={() => setInfoOpen(true)} title="多源检索架构与证据边界"><i className={live ? 'live' : ''} /><span>四源引擎</span><Info size={13} /></button>
+        <button className="icon-button" onClick={doExport} aria-label="导出研究简报" title="导出研究简报"><Download size={16} /></button>
+      </div>
     </header>
-    <div className="bd-subbar"><nav className="bd-navigation" aria-label="科研工作台视图">{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)} aria-current={view === id ? 'page' : undefined}><Icon size={16} /><span>{label}</span>{id === 'papers' && <em>{allPapers.length}</em>}{id === 'library' && savedPapers.length > 0 && <em>{savedPapers.length}</em>}</button>)}</nav>
-      <div className="bd-quick-topics" aria-label="跨学科示例主题">{quickTopics.map((topic) => <button key={topic.label} type="button" onClick={() => handleSearch(topic.query)} disabled={loading}>{topic.label}</button>)}</div>
-      <button className="bd-project" onClick={() => setProjectOpen(true)}><FlaskConical size={16} /><span><small>当前课题</small><strong>{project.target}</strong></span><em>更新进展</em></button>
+    <div className="bd-subbar">
+      <div className="bd-quick-topics" aria-label="跨学科示例主题"><span className="quick-label">快速探索</span>{quickTopics.map((topic) => <button key={topic.label} type="button" className={searchLabel === formatChemicalFormula(topic.query) ? 'active' : ''} onClick={() => handleSearch(topic.query)} disabled={loading}>{topic.label}</button>)}</div>
+      <div className="bd-stats-strip">
+        <span>节点 <strong>{graph.nodes.length}</strong></span>
+        <span>文献 <strong>{allPapers.length}</strong></span>
+        <span>开放全文 <strong>{oaCount}</strong></span>
+      </div>
     </div>
     <main className="bd-main">{view === 'map' ? <div className="bd-map-layout"><KnowledgeGraph graph={graph} papers={papers} selectedId={selectedId} onSelect={selectNode} loading={loading || Boolean(expandingId)} searchLabel={searchLabel} onReset={resetGraph} onDropToChat={sendCardToNative} /><Inspector node={selectedNode} papers={papers} recommendations={recommendations} project={project} tab={inspectorTab} onTab={setInspectorTab} onExpand={expandNode} expanding={Boolean(expandingId)} onOpenPaper={setActivePaper} onToggleSave={toggleSave} savedIds={savedIds} onProject={() => setProjectOpen(true)} onCheckCounter={checkCounterEvidence} counterEvidence={counterEvidence} checkingCounterId={checkingCounterId} onSendToChat={askNative ? (node) => sendCardToNative(cardForNode(node)) : undefined} /></div> : view === 'directions' ? <DirectionsView recommendations={recommendations} papers={papers} project={project} onOpenPaper={setActivePaper} onExport={doExport} onProject={() => setProjectOpen(true)} onCheckCounter={checkCounterEvidence} counterEvidence={counterEvidence} checkingCounterId={checkingCounterId} onLocateNode={locateRecommendation} /> : <PapersView papers={view === 'library' ? savedPapers : allPapers} savedIds={savedIds} onToggleSave={toggleSave} onOpenPaper={setActivePaper} library={view === 'library'} onExplore={() => setView('map')} />}</main>
     {embedded && <div className="bd-native-drop" data-bohr-dropzone><Network size={14} /><span>把上方卡片拖到这里，交给下方 DSH 原生对话</span></div>}
