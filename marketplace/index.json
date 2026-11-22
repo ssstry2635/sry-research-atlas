@@ -1,0 +1,87 @@
+{
+  "format": 1,
+  "title": {
+    "en": "Bohr Research Atlas Market Index",
+    "zh": "玻尔科学空间插件索引"
+  },
+  "description": {
+    "en": "Official format-1 DSH plugin market index for Bohr Research Atlas (sry-research-atlas).",
+    "zh": "玻尔科学空间（sry-research-atlas）的 DSH Format-1 插件市场索引源。"
+  },
+  "metadata": {
+    "categories": {
+      "research": {
+        "title": {
+          "en": "Research & Literature",
+          "zh": "科研与文献"
+        }
+      }
+    },
+    "labels": {
+      "open-access": {
+        "title": {
+          "en": "Open Access",
+          "zh": "开放获取"
+        }
+      },
+      "knowledge-graph": {
+        "title": {
+          "en": "Knowledge Graph",
+          "zh": "知识图谱"
+        }
+      }
+    },
+    "sortKeys": {}
+  },
+  "plugins": [
+    {
+      "name": "sry-research-atlas",
+      "title": {
+        "en": "Bohr Research Atlas",
+        "zh": "玻尔科学空间"
+      },
+      "description": {
+        "en": "Build a bilateral research knowledge network in DSH, search OpenAlex, Crossref, Europe PMC and arXiv, generate bilingual summaries and interactive mind maps, download legal open-access PDFs, and collaborate with native DSH conversation.",
+        "zh": "在 DSH 主面板和原生对话中构建双侧科研知识图谱，联合检索 OpenAlex、Crossref、Europe PMC 与 arXiv，生成四级保底中英概要与抗截断可追问思维导图，提供合法开放 PDF 下载并与原生对话无缝联动。"
+      },
+      "icon": "https://raw.githubusercontent.com/ssstry2635/sry-research-atlas/main/icon.svg",
+      "author": "ssstry2635",
+      "homepage": "https://github.com/ssstry2635/sry-research-atlas#readme",
+      "repository": {
+        "url": "https://github.com/ssstry2635/sry-research-atlas"
+      },
+      "metadata": {
+        "category": "research",
+        "keywords": [
+          "dsh-plugin",
+          "research",
+          "knowledge-graph",
+          "literature-review",
+          "materials-science",
+          "chemistry",
+          "open-access",
+          "mind-map"
+        ],
+        "labels": [
+          "open-access",
+          "knowledge-graph"
+        ],
+        "sortKeys": {}
+      },
+      "versions": [
+        {
+          "version": "4.7.0",
+          "publishTimestamp": 1795341500,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/ssstry2635/sry-research-atlas",
+            "commit": "07ae94e287bd1ab8eec6500ca778e785f3f6c311"
+          },
+          "engines": {
+            "dsh": ">=0.2.2-rc.5 <0.3.0-0"
+          }
+        }
+      ]
+    }
+  ]
+}
