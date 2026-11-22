@@ -267,10 +267,27 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
       setMindMapLoading(false);
     }
   };
-  const askMindMapNode = (paper: Paper, node: MindMapNode) => {
+  const askMindMapNode = (
+    paper: Paper,
+    node: MindMapNode,
+    customQuestion: string,
+    fullTextContext?: { available: boolean; source: string; text: string; pdfSavedPath?: string },
+  ) => {
     setMindMap(null);
-    const prompt = `请围绕论文《${paper.title}》（${paper.year || '年份未知'}，${paper.venue || '期刊未知'}）的“${node.label}”节点继续分析。\n\n节点说明：${node.zh}\n\n建议追问：${node.question}`;
-    void handleSaveChatCard({ id: `mindmap-${paper.id}-${node.id}`, kind: '思维导图节点', title: `${paper.title} · ${node.label}`, summary: node.zh, url: paper.url, paperId: paper.id }).finally(() => {
+    const pdfRef = fullTextContext?.pdfSavedPath ? `\n已下载本地开放 PDF 原文：@"${fullTextContext.pdfSavedPath}"` : '';
+    const nodeOriginal = node.originalText ? `\n\n【该节点对应详细原文（${node.section || '原文映射'}）】\n${node.originalText}` : '';
+    const fullTextBlock = fullTextContext?.text
+      ? `\n\n【自动获取并附带的论文原文（来源：${fullTextContext.source}）】\n${fullTextContext.text.slice(0, 14000)}`
+      : '';
+    const prompt = `请围绕论文《${paper.title}》（${paper.year || '年份未知'}，${paper.venue || '期刊未知'}${paper.doi ? `，DOI: ${paper.doi}` : ''}）的“${node.label}”部分继续深入回答。${pdfRef}\n\n【该部分结构解析与逻辑关系】\n${node.zh}${nodeOriginal}\n\n【用户追问问题】\n${customQuestion || node.question}${fullTextBlock}`;
+    void handleSaveChatCard({
+      id: `mindmap-${paper.id}-${node.id}`,
+      kind: '思维导图节点',
+      title: `${paper.title} · ${node.label}`,
+      summary: node.zh,
+      url: paper.url,
+      paperId: paper.id,
+    }).finally(() => {
       if (askNative) askNative(prompt);
       else setToast({ message: '请在 DSH 原生对话页展开玻尔研究网络，再从思维导图追问', error: true });
     });
@@ -294,7 +311,7 @@ export default function PluginApp({ embedded = false, askNative }: PluginAppProp
 
   return <div className={embedded ? 'bohr-dsh embedded' : 'bohr-dsh'}>
     <header className="bd-header">
-      <div className="bd-brand"><div className="bd-logo-orb"><AtlasMark /></div><div><strong>玻尔科学空间</strong><span>Bohr Research Atlas · 4.8</span></div></div>
+      <div className="bd-brand"><div className="bd-logo-orb"><AtlasMark /></div><div><strong>玻尔科学空间</strong><span>Bohr Research Atlas · 4.9</span></div></div>
       <nav className="bd-navigation" aria-label="科研工作台视图">{views.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)} aria-current={view === id ? 'page' : undefined}><Icon size={15} /><span>{label}</span>{id === 'papers' && <em>{allPapers.length}</em>}{id === 'directions' && <em>{recommendations.length}</em>}{id === 'library' && savedPapers.length > 0 && <em>{savedPapers.length}</em>}</button>)}</nav>
       <form className="bd-search" role="search" onSubmit={(event) => { event.preventDefault(); if (searchInput.trim()) handleSearch(searchInput.trim()); }}>
         {loading ? <LoaderCircle className="spin" size={16} /> : <Search size={16} />}

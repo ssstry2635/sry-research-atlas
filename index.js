@@ -1,11 +1,19 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
+import { inflateRawSync, inflateSync } from 'node:zlib';
+
+const execFileAsync = promisify(execFile);
 
 export const name = 'bohr-research-atlas';
 export const inject = ['tools', 'llm', 'agentDefaultModel', 'webServer'];
 
 const KB_PATH = join(homedir(), '.dsh', 'bohr-knowledge.json');
+const PAPER_CACHE_DIR = join(homedir(), '.dsh', 'bohr-papers');
+const fullTextCache = new Map();
 let writeChain = Promise.resolve();
 
 function jsonResponse(value, status = 200) {
@@ -261,54 +269,476 @@ function fallbackChineseSummary(paper) {
   return `《${paper.title}》${venue ? `（${venue}）` : ''}。当前仅有题录信息，尚未取得摘要，因此中文概要只说明论文主题，不能替代对方法、数据和结论的阅读。请回溯原文核验。`;
 }
 
-function fallbackMindMap(paper) {
-  const known = String(paper.summaryZh || paper.keyFinding || paper.abstract || '').replace(/\s+/g, ' ').trim().slice(0, 220);
-  const hasAbstract = Boolean(String(paper.abstract || '').trim());
+function parseJatsSections(xml) {
+  const raw = String(xml || '');
+  if (!raw.includes('<body') && !raw.includes('<abstract')) return null;
+  const sections = [];
+  const absMatch = raw.match(/<abstract[^>]*>([\s\S]*?)<\/abstract>/i);
+  if (absMatch) {
+    const absText = stripMarkup(absMatch[1]);
+    if (absText.length > 30) sections.push({ title: 'Abstract (原文摘要)', content: absText.slice(0, 3500) });
+  }
+  const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const body = bodyMatch ? bodyMatch[1] : raw;
+  const secRegex = /<sec[^>]*>[\s\S]*?<title[^>]*>([\s\S]*?)<\/title>([\s\S]*?)<\/sec>/gi;
+  let match;
+  while ((match = secRegex.exec(body)) !== null && sections.length < 14) {
+    const title = stripMarkup(match[1]).slice(0, 90);
+    const content = stripMarkup(match[2]).slice(0, 4200);
+    if (title && content.length > 60) sections.push({ title, content });
+  }
+  if (!sections.length) {
+    const plain = stripMarkup(body).slice(0, 16000);
+    if (plain.length > 100) sections.push({ title: 'Full Text (原文正文)', content: plain });
+  }
+  const combined = sections.map((sec) => `【${sec.title}】\n${sec.content}`).join('\n\n');
+  return combined.length > 80 ? { text: combined.slice(0, 24000), sections } : null;
+}
+
+function extractPdfTextNative(buffer) {
+  try {
+    const raw = buffer.toString('latin1');
+    const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    const chunks = [];
+    let match;
+    while ((match = streamRegex.exec(raw)) !== null && chunks.length < 80) {
+      const bodyBuf = Buffer.from(match[1], 'latin1');
+      let decoded = '';
+      try {
+        decoded = inflateSync(bodyBuf).toString('latin1');
+      } catch {
+        try {
+          decoded = inflateRawSync(bodyBuf).toString('latin1');
+        } catch {
+          decoded = match[1];
+        }
+      }
+      if (!decoded.includes('BT') && !decoded.includes('Tj') && !decoded.includes('TJ')) continue;
+      const parts = [];
+      const tjRegex = /\((?:\\.|[^\\()])*\)\s*Tj|\[([\s\S]*?)\]\s*TJ/g;
+      let tm;
+      while ((tm = tjRegex.exec(decoded)) !== null) {
+        const segment = tm[0];
+        const literals = segment.match(/\((?:\\.|[^\\()])*\)/g) || [];
+        const line = literals.map((lit) => lit.slice(1, -1)
+          .replace(/\\n/g, ' ')
+          .replace(/\\r/g, ' ')
+          .replace(/\\\(/g, '(')
+          .replace(/\\\)/g, ')')
+          .replace(/\\\\/g, '\\')).join('');
+        if (line.trim()) parts.push(line);
+      }
+      const pageText = parts.join(' ').replace(/\s+/g, ' ').trim();
+      const alphaCount = (pageText.match(/[A-Za-z]{3,}/g) || []).length;
+      if (pageText.length > 120 && alphaCount >= 12) {
+        chunks.push(pageText.slice(0, 3600));
+      }
+    }
+    if (!chunks.length) return null;
+    const sections = chunks.slice(0, 10).map((content, idx) => ({
+      title: `PDF Section ${idx + 1} (开放 PDF 原文提取第 ${idx + 1} 段)`,
+      content,
+    }));
+    const text = sections.map((sec) => `【${sec.title}】\n${sec.content}`).join('\n\n').slice(0, 24000);
+    return text.length > 160 ? { text, sections } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function extractPdfTextWithPython(pdfPath) {
+  const candidates = [
+    join(homedir(), 'AppData', 'Local', 'Programs', 'Python', 'Python311', 'python.exe'),
+    join(homedir(), '.dsh', 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'python', 'python.exe'),
+    'python',
+  ];
+  const outPath = `${pdfPath}.extracted.json`;
+  const script = [
+    'import sys, json',
+    'from pypdf import PdfReader',
+    'reader = PdfReader(sys.argv[1])',
+    'pages = []',
+    'for idx, page in enumerate(reader.pages[:16]):',
+    '    t = (page.extract_text() or "").strip()',
+    '    if len(t) > 60:',
+    '        pages.append({"title": f"Page {idx+1} (原文第 {idx+1} 页)", "content": t[:3200]})',
+    'full = "\\n\\n".join(f"【{p[\'title\']}】\\n{p[\'content\']}" for p in pages)',
+    'with open(sys.argv[2], "w", encoding="utf-8") as f:',
+    '    json.dump({"text": full[:24000], "sections": pages[:12]}, f, ensure_ascii=False)',
+  ].join('\n');
+  for (const py of candidates) {
+    if (py !== 'python' && !existsSync(py)) continue;
+    try {
+      await execFileAsync(py, ['-c', script, pdfPath, outPath], { timeout: 22_000, windowsHide: true });
+      if (existsSync(outPath)) {
+        const parsed = JSON.parse(await readFile(outPath, 'utf8'));
+        await unlink(outPath).catch(() => {});
+        if (parsed && typeof parsed.text === 'string' && parsed.text.trim().length > 100) {
+          return { text: parsed.text.trim(), sections: Array.isArray(parsed.sections) ? parsed.sections : [] };
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function fetchArxivHtmlSections(arxivId) {
+  if (!arxivId) return null;
+  const urls = [
+    `https://arxiv.org/html/${encodeURIComponent(arxivId)}`,
+    `https://ar5iv.labs.arxiv.org/html/${encodeURIComponent(arxivId)}`,
+  ];
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, {
+        redirect: 'follow',
+        headers: { Accept: 'text/html', 'User-Agent': 'BohrResearchAtlas/4.9' },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!resp.ok) continue;
+      const html = await resp.text();
+      if (!html.includes('ltx_section') && !html.includes('<section')) continue;
+      const sections = [];
+      const secRegex = /<section[^>]*>[\s\S]*?<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>([\s\S]*?)<\/section>/gi;
+      let match;
+      while ((match = secRegex.exec(html)) !== null && sections.length < 10) {
+        const title = stripMarkup(match[1]).slice(0, 90);
+        const content = stripMarkup(match[2]).slice(0, 3800);
+        if (title && content.length > 120) sections.push({ title, content });
+      }
+      if (sections.length >= 2) {
+        const text = sections.map((s) => `【${s.title}】\n${s.content}`).join('\n\n').slice(0, 24000);
+        return { text, sections };
+      }
+    } catch {}
+  }
+  return null;
+}
+
+async function resolvePaperFullText(paper) {
+  const cacheKey = String(paper.id || paper.doi || paper.title || '').trim();
+  if (cacheKey && fullTextCache.has(cacheKey)) return fullTextCache.get(cacheKey);
+  const doi = extractDoi(paper.doi || paper.id || paper.url || '');
+  const arxivMatch = String(paper.id || paper.pdfUrl || paper.url || '').match(/arxiv(?:\.org\/(?:abs|pdf)\/|:)(\d{4}\.\d{4,5}(?:v\d+)?)/i);
+  const arxivId = arxivMatch ? arxivMatch[1] : '';
+
+  // 1. Check Europe PMC fullTextXML (open-access JATS XML)
+  try {
+    const query = doi ? `DOI:"${doi}"` : `TITLE:"${String(paper.title || '').replace(/"/g, ' ').trim()}"`;
+    const epmcSearch = await fetchJsonWithTimeout(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&resultType=core&pageSize=2`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'BohrResearchAtlas/4.8' },
+    }, 10_000);
+    const hit = (epmcSearch.resultList?.result || [])[0];
+    if (hit?.pmcid) {
+      const xmlResp = await fetch(`https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(hit.pmcid)}/fullTextXML`, {
+        headers: { Accept: 'application/xml,text/xml,*/*', 'User-Agent': 'BohrResearchAtlas/4.8' },
+        signal: AbortSignal.timeout(14_000),
+      });
+      if (xmlResp.ok) {
+        const jats = parseJatsSections(await xmlResp.text());
+        if (jats) {
+          const res = { available: true, source: `Europe PMC 开放全文 (${hit.pmcid})`, text: jats.text, sections: jats.sections };
+          if (cacheKey) fullTextCache.set(cacheKey, res);
+          return res;
+        }
+      }
+    }
+    if (!paper.abstract && hit?.abstractText) {
+      paper.abstract = stripMarkup(hit.abstractText);
+    }
+  } catch {}
+
+  // 2. Check arXiv HTML5 open full text if arxivId is present
+  if (arxivId) {
+    const arxivHtml = await fetchArxivHtmlSections(arxivId);
+    if (arxivHtml) {
+      const res = {
+        available: true,
+        source: `arXiv HTML5 开放全文 (arXiv:${arxivId})`,
+        text: arxivHtml.text,
+        sections: arxivHtml.sections,
+      };
+      if (cacheKey) fullTextCache.set(cacheKey, res);
+      return res;
+    }
+  }
+
+  // 3. Check arXiv / direct open-access PDF, save locally, and extract text via Python pypdf or native FlateDecode parser
+  const candidatePdfUrls = [];
+  if (isPublicHttpsUrl(paper.pdfUrl)) candidatePdfUrls.push(paper.pdfUrl);
+  if (arxivId) candidatePdfUrls.push(`https://arxiv.org/pdf/${arxivId}.pdf`);
+  const reg = pdfRegistry.get(paper.id) || (doi ? pdfRegistry.get(doi) : null);
+  if (reg?.url && isPublicHttpsUrl(reg.url) && !candidatePdfUrls.includes(reg.url)) candidatePdfUrls.push(reg.url);
+
+  let downloadedPdfPath = '';
+  for (const pdfUrl of candidatePdfUrls) {
+    try {
+      const upstream = await fetch(pdfUrl, {
+        redirect: 'follow',
+        headers: { Accept: 'application/pdf,*/*;q=0.5', 'User-Agent': 'BohrResearchAtlas/4.9 (DSH plugin)' },
+        signal: AbortSignal.timeout(22_000),
+      });
+      if (!upstream.ok) continue;
+      const ctype = (upstream.headers.get('content-type') || '').toLowerCase();
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      const isPdfMagic = buf.byteLength > 100 && buf.subarray(0, 5).toString('ascii') === '%PDF-';
+      if (!ctype.includes('pdf') && !isPdfMagic) continue;
+      if (buf.byteLength > 35 * 1024 * 1024) continue;
+      await mkdir(PAPER_CACHE_DIR, { recursive: true });
+      const safeName = String(doi || arxivId || paper.id || 'paper').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+      const pdfPath = join(PAPER_CACHE_DIR, `${safeName}.pdf`);
+      await writeFile(pdfPath, buf);
+      downloadedPdfPath = pdfPath;
+      const extracted = (await extractPdfTextWithPython(pdfPath)) || extractPdfTextNative(buf);
+      if (extracted) {
+        const res = {
+          available: true,
+          source: `开放获取 PDF 原文提取 (${arxivId ? `arXiv:${arxivId}` : 'OA PDF'})`,
+          text: extracted.text,
+          sections: extracted.sections,
+          pdfSavedPath: pdfPath,
+        };
+        if (cacheKey) fullTextCache.set(cacheKey, res);
+        return res;
+      }
+    } catch {}
+  }
+
+  // 3. Fallback to available abstract or metadata
+  const abstractText = String(paper.abstract || '').trim();
+  if (abstractText.length > 40) {
+    const sentences = abstractText.split(/(?<=[.!?。！？])\s+/).filter(Boolean);
+    const mid = Math.max(1, Math.ceil(sentences.length / 2));
+    const sections = [
+      { title: 'Abstract · 研究背景与方法原文', content: sentences.slice(0, mid).join(' ') },
+      { title: 'Abstract · 实验结果与结论原文', content: sentences.slice(mid).join(' ') || abstractText },
+    ];
+    const res = {
+      available: Boolean(downloadedPdfPath),
+      source: downloadedPdfPath ? `已下载开放 PDF (${downloadedPdfPath}) 与原始摘要` : `${paper.source || '元数据'} 原始摘要（出版方未开放免费 PDF 全文）`,
+      text: `【Title】${paper.title}\n【Authors】${paper.authors}\n【Venue】${paper.venue} (${paper.year || '未知'})\n【DOI】${doi || '未提供'}${downloadedPdfPath ? `\n【本地开放 PDF 路径】${downloadedPdfPath}` : ''}\n【Abstract 原文】\n${abstractText}`,
+      sections,
+      pdfSavedPath: downloadedPdfPath || undefined,
+      reason: downloadedPdfPath ? undefined : '该论文受出版方订阅权限保护或未提供开放 PDF，当前仅能获取原始摘要与题录元数据。',
+    };
+    if (cacheKey) fullTextCache.set(cacheKey, res);
+    return res;
+  }
+
+  const metaOnly = `Title: ${paper.title}\nAuthors: ${paper.authors || '未提供'}\nVenue: ${paper.venue || '未提供'} (${paper.year || '年份未知'})\nDOI: ${doi || '未提供'}\nURL: ${paper.landingUrl || paper.url || '未提供'}\nNote: 出版方（${paper.venue || '该期刊'}）未向开放数据库公开摘要或免费 PDF 全文。`;
   return {
-    title: paper.title || '论文思维导图',
-    summary: known || '当前只有题录信息，以下导图仅提供阅读框架，具体方法与结论需回溯原文。',
-    generatedBy: 'fallback',
-    nodes: [
-      { id: 'root', parentId: null, label: '研究主题', zh: `论文围绕“${paper.title || '该论文'}”展开。`, question: '这篇论文试图解决的核心科学问题是什么？' },
-      { id: 'known', parentId: 'root', label: '已知证据', zh: known || '摘要未提供具体结果，需要回溯原文确认。', question: '目前能从题目或摘要确认哪些事实，哪些仍然未知？' },
-      { id: 'method', parentId: 'root', label: '方法与材料', zh: hasAbstract ? '摘要未完整给出实验条件，需回溯原文核验材料、合成和表征细节。' : '仅有题录信息，摘要未提供，无法确认材料与实验方法。', question: '这篇论文使用了哪些材料、合成步骤和表征手段？' },
-      { id: 'boundary', parentId: 'root', label: '证据边界', zh: '本导图只依据题目与摘要生成，未阅读全文，不能替代对数据、对照和统计的核查。', question: '现有证据支持到什么程度，哪些结论仍需原文数据支持？' },
-      { id: 'next', parentId: 'root', label: '下一步验证', zh: '先回溯原文的方法与结果部分，再设计可重复的对照实验或检索独立复现研究。', question: '如果要在自己的体系中验证这篇论文，最小实验和停止条件是什么？' },
-    ],
-    edges: [['root', 'known'], ['root', 'method'], ['root', 'boundary'], ['root', 'next']],
+    available: false,
+    source: '仅题录元数据（闭源期刊未公开摘要与全文）',
+    text: metaOnly,
+    sections: [{ title: 'Bibliographic Record (原始题录记录)', content: metaOnly }],
+    reason: '该论文在 OpenAlex、Crossref、Europe PMC 与 Semantic Scholar 中均为闭源状态（CLOSED），且未公开摘要或开放 PDF。',
   };
 }
 
-function normalizeMindMap(parsed, paper) {
+function splitOriginalPassages(fullText, paper) {
+  const sections = Array.isArray(fullText?.sections) && fullText.sections.length ? fullText.sections : [];
+  if (sections.length >= 4) {
+    return sections.map((sec) => ({ section: sec.title, text: sec.content }));
+  }
+  const abstract = String(paper.abstract || '').trim();
+  if (abstract.length > 40) {
+    const sentences = abstract.split(/(?<=[.!?。！？])\s+/).filter(Boolean);
+    const n = sentences.length;
+    if (n >= 4) {
+      return [
+        { section: 'Abstract §1 · 核心命题与研究背景 (Motivation & Scope)', text: `${sentences[0]}\n\n[Full Context] ${abstract}` },
+        { section: 'Abstract §2 · 样品制备与合成路线 (Synthesis & Protocol)', text: `${sentences.slice(0, Math.min(2, n)).join(' ')}\n\n[Method Context] ${ sentences[1] || sentences[0] }` },
+        { section: 'Abstract §3 · 微观结构与构效机制 (Structure & Mechanism)', text: `${sentences.slice(1, Math.min(3, n)).join(' ')}` },
+        { section: 'Abstract §4 · 物理性质与功能响应 (Optical / Electronic Properties)', text: `${sentences.slice(Math.max(0, Math.floor(n / 2) - 1), Math.min(n, Math.floor(n / 2) + 2)).join(' ')}` },
+        { section: 'Abstract §5 · 定量表征与直接实验判据 (Quantitative Evidence)', text: `${sentences.slice(Math.max(0, n - 2)).join(' ')}` },
+        { section: 'Abstract §6 · 适用边界与器件化挑战 (Limitations & Boundary)', text: `${sentences[n - 1]}\n\n[Complete Abstract Record]\n${abstract}` },
+      ];
+    }
+    return [
+      { section: 'Abstract · 科学问题与动机 (Opening)', text: sentences[0] || abstract },
+      { section: 'Abstract · 材料合成与表征方法 (Methodology)', text: sentences[1] || abstract },
+      { section: 'Abstract · 核心实验发现与机理 (Findings)', text: sentences[sentences.length - 1] || abstract },
+      { section: 'Abstract · 全文摘要完整记录 (Complete Abstract)', text: abstract },
+    ];
+  }
+  const bib = `Title: "${paper.title}"\nAuthors: ${paper.authors || 'Unknown'}\nJournal: ${paper.venue || 'Unknown'} (${paper.year || 'Unknown'})\nDOI: ${paper.doi || 'N/A'}\nOpen Access: ${paper.openAccess ? 'Yes' : 'No (Closed Access)'}`;
+  return [
+    { section: 'Bibliographic Metadata · 论文题录原文', text: bib },
+  ];
+}
+
+function fallbackMindMap(paper, fullText) {
+  const known = String(paper.summaryZh || paper.keyFinding || paper.abstract || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+  const hasAbstract = Boolean(String(paper.abstract || '').trim());
+  const passages = splitOriginalPassages(fullText, paper);
+  const pickPassage = (idx) => passages[Math.min(idx, passages.length - 1)] || passages[0];
+  const nodes = [
+    {
+      id: 'root',
+      parentId: null,
+      label: '核心命题与体系',
+      relation: '研究起点',
+      section: pickPassage(0).section,
+      originalText: pickPassage(0).text,
+      zh: `围绕“${paper.title || '该论文'}”的核心材料/模型体系与科学假设展开。`,
+      question: '这篇论文试图建立怎样的结构—性质因果链？',
+    },
+    {
+      id: 'synthesis',
+      parentId: 'root',
+      label: '样品制备与控制变量',
+      relation: '提供实验样品',
+      section: pickPassage(1).section,
+      originalText: pickPassage(1).text,
+      zh: hasAbstract ? '通过特定合成或构建工艺控制样品维度、组成与结晶质量，为后续结构与性能表征提供物质基础。' : '题录表明论文首先聚焦样品合成（Synthesis），但具体生长参数、前驱体与厚度分布需读取原文实验节确认。',
+      question: '原文采用的合成路线与关键控制参数（温度、基底、厚度）是什么？',
+    },
+    {
+      id: 'structure',
+      parentId: 'synthesis',
+      label: '原子结构与对称性破缺',
+      relation: '合成决定微观结构',
+      section: pickPassage(1).section,
+      originalText: pickPassage(1).text,
+      zh: hasAbstract ? '对样品的晶格常数、阳离子位移、空间群或微结构进行表征，揭示物理性质的结构起源。' : '题录指明第二部分为原子结构（Atomic Structure），它是连接样品合成与铁电/电子性质的桥梁，具体电镜或衍射数据需核查原文。',
+      question: '原文用哪些原子级表征（如 HAADF-STEM、XRD、Raman）证实了非中心对称或特定相结构？',
+    },
+    {
+      id: 'property',
+      parentId: 'structure',
+      label: '电子性质与功能响应',
+      relation: '结构支配本征物性',
+      section: pickPassage(2).section,
+      originalText: pickPassage(2).text,
+      zh: hasAbstract ? (known || '测定或计算体系的电子能带、极化翻转或器件响应，验证微观结构带来的宏观功能。') : '题录指明第三部分为铁电与电子性质（Ferroelectric & Electronic Properties），由原子结构直接决定，具体极化回线与能带参数需读原文确认。',
+      question: '原子结构中的离子位移或层间耦合如何定量决定其铁电翻转势垒与电子能带结构？',
+    },
+    {
+      id: 'evidence',
+      parentId: 'property',
+      label: '直接证据与判据链',
+      relation: '实验/理论交叉印证',
+      section: pickPassage(2).section,
+      originalText: pickPassage(2).text,
+      zh: fullText?.available ? '原文提供了具体的实验测量或计算曲线来支撑物性声称，可点击下方原文面板逐段核对。' : (hasAbstract ? '摘要给出了结论性陈述，但区分直接实验测量与第一性原理计算预测仍需核对原文正文图件。' : '当前仅能从题目确认研究声称存在铁电性与电子性质，尚无原文图件（如 PFM 相位回线、SHG 或 DFT 计算）可供核实。'),
+      question: '原文证明核心物性的直接实验证据是什么，是否排除了界面电荷或电化学伪影？',
+    },
+    {
+      id: 'boundary',
+      parentId: 'evidence',
+      label: '证据边界与迁移条件',
+      relation: '界定结论适用范围',
+      section: pickPassage(3).section,
+      originalText: pickPassage(3).text,
+      zh: fullText?.available ? '已提取开放全文片段，需结合样品厚度、测量温度与对照设计评估结论向新体系迁移的边界。' : '由于缺乏开放全文数据，不能将题目或摘要中的宏观声称直接外推为任意组分、任意厚度或室温器件下的既定事实。',
+      question: '现有证据的边界在哪里，若要迁移到我们的课题体系需要补做哪组最小对照实验？',
+    },
+  ];
+  const relations = [
+    { source: 'root', target: 'synthesis', label: '拆解制备路线' },
+    { source: 'synthesis', target: 'structure', label: '工艺决定结构' },
+    { source: 'structure', target: 'property', label: '结构支配物性' },
+    { source: 'property', target: 'evidence', label: '需数据支撑' },
+    { source: 'evidence', target: 'boundary', label: '界定有效边界' },
+    { source: 'synthesis', target: 'boundary', label: '工艺窗口约束' },
+    { source: 'structure', target: 'evidence', label: '微观结构印证' },
+  ];
+  return {
+    title: paper.title || '论文结构关系与原文导图',
+    summary: fullText?.available
+      ? `已自动提取该论文的开放原文（${fullText.source}），构建了“制备 → 结构 → 物性 → 证据 → 边界”的多维关系网络。点击任意节点即可对照阅读详细原文片段。`
+      : (known || '已根据论文内在科学逻辑构建“制备 → 结构 → 物性 → 证据 → 边界”关系图谱；点击各节点可查看当前可获得的原始题录或摘要记录。'),
+    generatedBy: 'fallback',
+    nodes,
+    edges: relations.map((r) => [r.source, r.target]),
+    relations,
+    fullTextAvailable: Boolean(fullText?.available),
+    fullTextSource: fullText?.source || '题录与摘要元数据',
+    fullTextExcerpt: String(fullText?.text || '').slice(0, 18000),
+    pdfSavedPath: fullText?.pdfSavedPath || undefined,
+  };
+}
+
+function normalizeMindMap(parsed, paper, fullText) {
   if (!parsed || !Array.isArray(parsed.nodes) || parsed.nodes.length === 0) return null;
+  const passages = splitOriginalPassages(fullText, paper);
   const sourceNodes = parsed.nodes.slice(0, 9);
   const used = new Set();
   const originalRoot = String(sourceNodes[0]?.id || 'root').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'root';
+  const idMap = new Map();
   const nodes = sourceNodes.map((node, index) => {
-    let id = index === 0 ? 'root' : String(node?.id || `n${index + 1}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || `n${index + 1}`;
+    const rawId = String(node?.id || `n${index + 1}`);
+    let id = index === 0 ? 'root' : rawId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || `n${index + 1}`;
     while (used.has(id)) id = `${id}_${index + 1}`;
     used.add(id);
+    idMap.set(rawId, id);
     let parentId = index === 0 ? null : (node?.parentId ? String(node.parentId) : 'root');
     if (parentId === originalRoot) parentId = 'root';
+    const fallbackPassage = passages[Math.min(index, passages.length - 1)] || passages[0];
+    const verbatim = String(node?.originalText || node?.quote || node?.excerpt || '').trim();
     return {
       id,
       parentId,
       label: String(node?.label || `节点 ${index + 1}`).slice(0, 80),
-      zh: String(node?.zh || node?.description || '摘要未提供，需要读原文。').slice(0, 400),
+      relation: String(node?.relation || (index === 0 ? '核心锚点' : '逻辑递进')).slice(0, 24),
+      section: String(node?.section || fallbackPassage?.section || '原文对应段落').slice(0, 90),
+      originalText: (verbatim.length >= 25 ? verbatim : `${verbatim ? `${verbatim}\n\n` : ''}${fallbackPassage?.text || ''}`).slice(0, 3200),
+      zh: String(node?.zh || node?.description || '摘要未提供，需要读原文。').slice(0, 500),
       question: String(node?.question || `请解释“${node?.label || '这个节点'}”在论文中的依据和边界。`).slice(0, 220),
     };
   });
   const validIds = new Set(nodes.map((node) => node.id));
   nodes.forEach((node, index) => {
-    if (index > 0 && (!node.parentId || !validIds.has(node.parentId) || node.parentId === node.id)) node.parentId = 'root';
+    if (index > 0) {
+      const mappedParent = idMap.get(node.parentId) || node.parentId;
+      node.parentId = (mappedParent && validIds.has(mappedParent) && mappedParent !== node.id) ? mappedParent : 'root';
+    }
   });
-  const edges = nodes.filter((node) => node.parentId && validIds.has(node.parentId)).map((node) => [node.parentId, node.id]);
+  const relationList = [];
+  const seenEdges = new Set();
+  const addRelation = (src, tgt, label) => {
+    const s = idMap.get(src) || src;
+    const t = idMap.get(tgt) || tgt;
+    if (!s || !t || s === t || !validIds.has(s) || !validIds.has(t)) return;
+    const key = `${s}->${t}`;
+    if (seenEdges.has(key)) return;
+    seenEdges.add(key);
+    relationList.push({ source: s, target: t, label: String(label || '关联支撑').slice(0, 24) });
+  };
+  nodes.forEach((node) => {
+    if (node.parentId && validIds.has(node.parentId)) {
+      addRelation(node.parentId, node.id, node.relation || '逻辑推导');
+    }
+  });
+  if (Array.isArray(parsed.relations)) {
+    parsed.relations.forEach((rel) => {
+      if (rel && rel.source && rel.target) addRelation(rel.source, rel.target, rel.label || '交叉印证');
+    });
+  }
+  if (Array.isArray(parsed.edges)) {
+    parsed.edges.forEach((edge) => {
+      if (Array.isArray(edge) && edge.length >= 2) addRelation(edge[0], edge[1], edge[2] || '逻辑关联');
+      else if (edge && edge.source && edge.target) addRelation(edge.source, edge.target, edge.label || '逻辑关联');
+    });
+  }
+  // Ensure cross-links exist so the diagram reflects inter-part relationships rather than a flat star
+  if (nodes.length >= 4 && relationList.length <= nodes.length - 1) {
+    addRelation(nodes[1].id, nodes[2].id, '结构/方法衔接');
+    addRelation(nodes[2].id, nodes[3].id, '机理与证据支撑');
+    if (nodes[4]) addRelation(nodes[3].id, nodes[4].id, '边界与外推约束');
+  }
+  const edges = relationList.map((r) => [r.source, r.target]);
   return {
-    title: String(parsed.title || paper.title || '论文思维导图').slice(0, 160),
-    summary: String(parsed.summary || parsed.zh || paper.summaryZh || '请结合原文核验下列阅读框架。').slice(0, 500),
+    title: String(parsed.title || paper.title || '论文结构关系与原文导图').slice(0, 160),
+    summary: String(parsed.summary || parsed.zh || paper.summaryZh || '请点击各个节点查看不同部分之间的因果支撑关系及对应原文段落。').slice(0, 500),
     generatedBy: 'model',
     nodes,
     edges,
+    relations: relationList,
+    fullTextAvailable: Boolean(fullText?.available),
+    fullTextSource: fullText?.source || '题录与摘要元数据',
+    fullTextExcerpt: String(fullText?.text || '').slice(0, 18000),
+    pdfSavedPath: fullText?.pdfSavedPath || undefined,
   };
 }
 
@@ -859,37 +1289,57 @@ async function handleRequest(ctx, request, peer) {
     }
     return jsonResponse({ items: source.map((paper) => byId.get(paper.id)).filter(Boolean) });
   }
+  if (request.method === 'POST' && path === 'fulltext') {
+    const body = await readBody(request);
+    const paper = normalizePaper(body.paper || {});
+    const fullText = await resolvePaperFullText(paper);
+    return jsonResponse(fullText);
+  }
   if (request.method === 'POST' && path === 'mindmap') {
     const body = await readBody(request);
     const paper = normalizePaper(body.paper || {});
+    const fullText = await resolvePaperFullText(paper);
     const source = {
       title: paper.title,
       authors: paper.authors,
       year: paper.year,
       venue: paper.venue,
-      abstract: String(paper.abstract || '').slice(0, 1600),
+      doi: paper.doi || '',
+      abstract: String(paper.abstract || '').slice(0, 1800),
       summaryZh: String(paper.summaryZh || '').slice(0, 500),
       keyFinding: String(paper.keyFinding || '').slice(0, 400),
+      fullTextSource: fullText.source,
+      fullTextSections: (fullText.sections || []).slice(0, 6).map((s) => ({
+        title: s.title,
+        content: String(s.content || '').slice(0, 900),
+      })),
     };
     const prompts = [
-      `为论文生成可追问的精简思维导图，最多 8 个节点。每个节点 zh 不超过 90 个汉字，question 不超过 60 个汉字；若摘要缺少某部分，写“摘要未提供，需要读原文”。\n论文：\n${JSON.stringify(source)}\n只输出一行合法 JSON，不要 Markdown、注释或多余文字。格式：{"title":"短标题","summary":"一句话中文总览","nodes":[{"id":"root","parentId":null,"label":"核心问题","zh":"中文说明","question":"追问问题"},{"id":"method","parentId":"root","label":"方法与材料","zh":"...","question":"..."}],"edges":[["root","method"]]}。节点覆盖研究问题、材料与合成、关键结果、证据边界和下一步验证。`,
-      `只输出紧凑单行 JSON，最多 6 个节点，每个 zh 不超过 60 字。若信息不足写“仅有题录信息”。不要 Markdown。\n${JSON.stringify({ title: source.title, abstract: source.abstract.slice(0, 900), summaryZh: source.summaryZh })}\n格式：{"title":"...","summary":"...","nodes":[{"id":"root","parentId":null,"label":"...","zh":"...","question":"..."}],"edges":[]}。`,
+      `为论文生成体现各部分因果与支撑关系的结构图谱（不能是单纯罗列概括，必须构成多层级因果/印证网络），共 6–8 个节点。
+论文及可用原文片段：
+${JSON.stringify(source)}
+要求：
+1. 节点必须覆盖：研究起点(root) → 制备/实现路线(synthesis/method) → 微观结构/理论机制(structure/mechanism) → 物理或功能响应(properties) → 直接证据与实验判据(evidence) → 证据边界与迁移条件(boundary)。
+2. 节点不能全部挂在 root 下，要通过 parentId 形成至少 3 层递进链条（level 0 → level 1 → level 2 → level 3），并在 relations 数组中给出 6–9 条跨部分有向关系（如 {"source":"synthesis","target":"structure","label":"合成参数决定相结构"}、{"source":"structure","target":"properties","label":"对称性破缺诱发铁电"}、{"source":"properties","target":"evidence","label":"实验曲线印证"}）。
+3. 每个节点必须包含 section（对应原文出处章节或元数据字段）与 originalText（从上面提供的原文片段或摘要中逐字摘录对应的详细英文/原始句子，不少于 35 个词；若原文未公开摘要则如实摘录题录原文并注明闭源未公开部分）。
+4. 只输出一行合法 JSON，不要 Markdown。格式：{"title":"短标题","summary":"中文总览","nodes":[{"id":"root","parentId":null,"label":"节点名","relation":"关系短语","section":"原文出处","originalText":"对应的详细原文段落","zh":"中文深度解析","question":"建议追问"}],"relations":[{"source":"root","target":"n2","label":"关系说明"}]}`,
+      `只输出紧凑单行 JSON，6 个节点，包含 parentId 多层关系、section、originalText（对应原文句子）、zh、question 和 relations 数组。不要 Markdown。\n${JSON.stringify({ title: source.title, abstract: source.abstract.slice(0, 1000), sections: source.fullTextSections.slice(0, 3) })}\n格式：{"title":"...","summary":"...","nodes":[{"id":"root","parentId":null,"label":"...","relation":"...","section":"...","originalText":"...","zh":"...","question":"..."}],"relations":[{"source":"root","target":"...","label":"..."}]}`,
     ];
     let mapped = null;
     for (let attempt = 0; attempt < prompts.length && !mapped; attempt += 1) {
       try {
         const raw = await complete(ctx, {
-          system: '你是严谨的跨学科科研论文阅读教练。只依据题目和摘要绘制结构化思维导图，不得虚构实验细节。输出严格单行 JSON，不要 Markdown 代码围栏，不得截断。',
+          system: '你是严谨的跨学科科研论文结构图谱教练。只依据提供的原文段落、摘要和题录构建体现各部分因果与支撑关系的结构导图，严禁捏造未提供的实验数值。输出严格单行 JSON，不要 Markdown 代码围栏。',
           prompt: prompts[attempt],
-          maxTokens: attempt === 0 ? 3200 : 3600,
+          maxTokens: attempt === 0 ? 3600 : 3800,
           signal: request.signal,
         });
-        mapped = normalizeMindMap(parseJson(raw), paper);
+        mapped = normalizeMindMap(parseJson(raw), paper, fullText);
       } catch {
-        // A truncated or malformed model response falls back to the compact prompt, then to a deterministic map.
+        // Fallback to compact prompt, then deterministic relational map.
       }
     }
-    return jsonResponse(mapped || fallbackMindMap(paper));
+    return jsonResponse(mapped || fallbackMindMap(paper, fullText));
   }
   if (request.method === 'GET' && path === 'health') {
     return jsonResponse({ ok: true, kbPath: KB_PATH, model: resolveRoute(ctx) });

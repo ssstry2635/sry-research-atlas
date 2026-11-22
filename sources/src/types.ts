@@ -29,6 +29,15 @@ export interface MindMapNode {
   label: string;
   zh: string;
   question: string;
+  section?: string;
+  originalText?: string;
+  relation?: string;
+}
+
+export interface MindMapRelation {
+  source: string;
+  target: string;
+  label: string;
 }
 
 export interface MindMap {
@@ -36,7 +45,21 @@ export interface MindMap {
   summary: string;
   nodes: MindMapNode[];
   edges?: Array<[string, string]>;
+  relations?: MindMapRelation[];
   generatedBy?: 'model' | 'fallback';
+  fullTextAvailable?: boolean;
+  fullTextSource?: string;
+  fullTextExcerpt?: string;
+  pdfSavedPath?: string;
+}
+
+export interface FullTextResponse {
+  available: boolean;
+  source: string;
+  text: string;
+  sections?: Array<{ title: string; content: string }>;
+  reason?: string;
+  pdfSavedPath?: string;
 }
 
 export interface ChatCard {
